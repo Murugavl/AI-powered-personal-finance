@@ -1,8 +1,8 @@
-// File: C:\Users\MURUGAVEL V\Desktop\Personal finance\Finance_React\finance\frontend\app\auth\login\[[...rest]]\page.tsx
-import * as entry from '../../../../../../app/auth/login/[[...rest]]/page.js'
+// File: C:\Users\MURUGAVEL V\Desktop\Personal finance\Finance_React\finance\frontend\app\help\page.tsx
+import * as entry from '../../../../app/help/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 
-type TEntry = typeof import('../../../../../../app/auth/login/[[...rest]]/page.js')
+type TEntry = typeof import('../../../../app/help/page.js')
 
 // Check that the entry is a valid entry
 checkFields<Diff<{

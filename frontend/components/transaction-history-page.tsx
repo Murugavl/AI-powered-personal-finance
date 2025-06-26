@@ -98,8 +98,9 @@ export function TransactionHistoryPageComponent() {
 
         if (data.transactions) {
           setTransactions((prev) => [...prev, ...data.transactions]);
-        } else {
-          toast.warn("Bill uploaded, but no transactions were returned.");
+        } 
+        else {
+          console.log("No transactions found in the response.");
         }
       } else {
         toast.error(`Upload failed! Server Response: ${data.detail || "Unknown error"}`);

@@ -11,15 +11,21 @@
       "static/css/app/layout.css",
       "static/chunks/app/layout.js"
     ],
-    "/auth/login/[[...rest]]/page": [
+    "/reports/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/auth/login/[[...rest]]/page.js"
+      "static/chunks/app/reports/page.js"
     ],
-    "/auth/layout": [
+    "/export/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/auth/layout.js"
+      "static/chunks/app/export/page.js"
+    ],
+    "/help/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/css/app/help/page.css",
+      "static/chunks/app/help/page.js"
     ]
   }
 }
