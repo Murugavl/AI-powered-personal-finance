@@ -19,7 +19,7 @@ The AI-Powered Personal Finance Assistant helps users track expenses, analyze sp
 ## 🚀 Installation & Setup
 ### 1️⃣ Clone the Repository
 ```bash
-git clone https://github.com/Murugavel/AI-powered-personal-finance.git
+git clone https://github.com/Murugavl/AI-powered-personal-finance.git
 cd finance
 ```
 
