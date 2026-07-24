@@ -1,12 +1,9 @@
-import sys
-import os
 from motor.motor_asyncio import AsyncIOMotorClient
+from app.config import settings
 
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
-MONGO_URL = os.getenv("MONGO_URL")
-client = AsyncIOMotorClient(MONGO_URL)
-db = client["AI_Finance"]  
+# Initialize MongoDB client using centralized settings
+client = AsyncIOMotorClient(settings.MONGO_URL)
+db = client.get_default_database() # or use setting for db name if needed
 
 def get_db():
     return db

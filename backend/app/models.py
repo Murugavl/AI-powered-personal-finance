@@ -2,7 +2,7 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
 
-# Expense Model (already added)
+# Expense Model
 class Expense(BaseModel):
     title: str
     amount: float
@@ -10,7 +10,7 @@ class Expense(BaseModel):
     date: datetime = datetime.now()
     notes: Optional[str] = None
 
-#  Transaction Model
+# Transaction Model
 class Transaction(BaseModel):
     type: str  # "income" or "expense"
     amount: float
@@ -31,3 +31,19 @@ class Budget(BaseModel):
     category: str
     budget: float
     spent: float = 0.0  # Default spent amount
+
+# User Models for custom auth
+class UserCreate(BaseModel):
+    username: str
+    email: str
+    password: str
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+class UserResponse(BaseModel):
+    id: str
+    username: str
+    email: str
+    token: str

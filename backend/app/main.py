@@ -6,19 +6,20 @@ from app.routes.accounts import router as accounts_router
 from app.routes.bill_upload import router as bill_upload_router  
 from app.routes.budgets import router as budgets_router 
 from app.routes.export import router as export_router 
+from app.routes.auth import router as auth_router
 
-app = FastAPI()
-
+app = FastAPI(title="Finance App API", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:3000"],
     allow_credentials=True, 
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Include all routers
+app.include_router(auth_router)
 app.include_router(expenses_router)
 app.include_router(transactions_router)
 app.include_router(accounts_router)
@@ -28,4 +29,4 @@ app.include_router(export_router)
 
 @app.get("/")
 async def home():
-    return {"message": "FastAPI backend is running!"}
+    return {"message": "Finance App API v2.0 is running!"}

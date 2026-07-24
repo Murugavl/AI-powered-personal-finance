@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from app.database import db
-from models import Expense
+from app.models import Expense
 from bson import ObjectId
 from typing import List
 
