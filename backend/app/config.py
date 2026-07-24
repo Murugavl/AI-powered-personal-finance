@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     JWT_SECRET: str = "finance_app_super_secret_key_2024_xK9mP2nQ"
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 10080  # 7 days
+    GEMINI_API_KEY: str = "AIzaSyDk822gJdaWmDvlCOJDykHP-4fCjBGnvGg"
     
     # Tool Paths (Environment Variables)
     TESSERACT_PATH: str = "tesseract"

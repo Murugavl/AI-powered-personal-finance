@@ -1,26 +1,18 @@
 import logging
 import csv
-import html
-import pdfkit
-from io import StringIO
+import io
 from fastapi import APIRouter, Response, Depends, HTTPException
-from fastapi.responses import StreamingResponse
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.database import get_db
 from app.auth import get_current_user
-from app.config import settings
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
 
-# Set up logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/export", tags=["Export"])
-
-# Configure wkhtmltopdf from centralized settings
-try:
-    PDFKIT_CONFIG = pdfkit.configuration(wkhtmltopdf=settings.WKHTMLTOPDF_PATH)
-except OSError:
-    logger.warning("wkhtmltopdf not found. PDF export will not be available unless configured correctly.")
-    PDFKIT_CONFIG = None
 
 @router.get("/export-transactions")
 async def export_transactions(
@@ -32,77 +24,105 @@ async def export_transactions(
         transactions_cursor = db.transactions.find({"user_id": user_id})
         transactions = await transactions_cursor.to_list(length=1000)
 
-        if not transactions:
-            raise HTTPException(status_code=404, detail="No transactions found to export.")
-
-        sanitized_txns = []
+        txns_list = []
         for txn in transactions:
-            sanitized_txns.append({
-                "date": str(txn.get("date", "")),
-                "category": html.escape(str(txn.get("category", "Unknown"))),
+            date_str = str(txn.get("date", ""))[:10]
+            txns_list.append({
+                "date": date_str,
+                "category": str(txn.get("category", "General")).capitalize(),
                 "amount": float(txn.get("amount", 0)),
-                "description": html.escape(str(txn.get("description", "")))
+                "type": str(txn.get("type", "expense")).capitalize(),
+                "description": str(txn.get("description", "—"))
             })
 
-        if format == "csv":
-            buffer = StringIO()
-            writer = csv.writer(buffer)
-            writer.writerow(["Date", "Category", "Amount", "Description"])
-            for txn in sanitized_txns:
-                writer.writerow([txn["date"], txn["category"], f"{txn['amount']:.2f}", txn["description"]])
+        if format.lower() == "csv":
+            output = io.StringIO()
+            writer = csv.writer(output)
+            writer.writerow(["Date", "Type", "Category", "Amount (INR)", "Description"])
+            if not txns_list:
+                writer.writerow(["No data", "N/A", "N/A", "0.00", "No transactions found"])
+            else:
+                for t in txns_list:
+                    writer.writerow([t["date"], t["type"], t["category"], f"{t['amount']:.2f}", t["description"]])
             
-            buffer.seek(0)
-            return StreamingResponse(
-                buffer,
+            content = output.getvalue().encode("utf-8")
+            return Response(
+                content=content,
                 media_type="text/csv",
                 headers={"Content-Disposition": "attachment; filename=transactions.csv"}
             )
 
-        elif format == "pdf":
-            rows_html = "".join([
-                f"<tr><td>{t['date']}</td><td>{t['category']}</td><td>{t['amount']:.2f}</td><td>{t['description']}</td></tr>"
-                for t in sanitized_txns
-            ])
+        elif format.lower() == "pdf":
+            buffer = io.BytesIO()
+            doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
+            styles = getSampleStyleSheet()
+            
+            title_style = ParagraphStyle(
+                'DocTitle',
+                parent=styles['Heading1'],
+                fontSize=20,
+                textColor=colors.HexColor("#7c3aed"),
+                spaceAfter=12
+            )
+            subtitle_style = ParagraphStyle(
+                'DocSubTitle',
+                parent=styles['Normal'],
+                fontSize=10,
+                textColor=colors.HexColor("#64748b"),
+                spaceAfter=20
+            )
 
-            html_content = f"""
-            <html>
-            <head>
-                <meta charset="UTF-8">
-                <style>
-                    body {{ font-family: sans-serif; }}
-                    table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
-                    th, td {{ border: 1px solid black; padding: 8px; text-align: left; }}
-                    th {{ background-color: #f2f2f2; }}
-                </style>
-            </head>
-            <body>
-                <h2>Transaction History Report</h2>
-                <table>
-                    <thead>
-                        <tr><th>Date</th><th>Category</th><th>Amount</th><th>Description</th></tr>
-                    </thead>
-                    <tbody>
-                        {rows_html}
-                    </tbody>
-                </table>
-            </body>
-            </html>
-            """
+            elements = [
+                Paragraph("FinanceAI — Transaction History Report", title_style),
+                Paragraph(f"Generated for User ID: {user_id}", subtitle_style),
+                Spacer(1, 10)
+            ]
 
-            if PDFKIT_CONFIG is None:
-                raise HTTPException(status_code=500, detail="PDF export is not available because wkhtmltopdf is not installed or configured correctly.")
-            pdf = pdfkit.from_string(html_content, False, configuration=PDFKIT_CONFIG)
+            table_data = [["Date", "Type", "Category", "Amount (₹)", "Description"]]
+            if not txns_list:
+                table_data.append(["—", "—", "No transactions", "0.00", "No transactions available"])
+            else:
+                for t in txns_list:
+                    table_data.append([
+                        t["date"],
+                        t["type"],
+                        t["category"],
+                        f"₹{t['amount']:,.2f}",
+                        t["description"][:35]
+                    ])
+
+            col_widths = [75, 60, 90, 85, 200]
+            t = Table(table_data, colWidths=col_widths)
+            t.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#0f172a')),
+                ('TEXTCOLOR', (0,0), (-1,0), colors.HexColor('#a78bfa')),
+                ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+                ('ALIGN', (3,0), (3,-1), 'RIGHT'),
+                ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0,0), (-1,0), 10),
+                ('BOTTOMPADDING', (0,0), (-1,0), 8),
+                ('TOPPADDING', (0,0), (-1,0), 8),
+                ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#e2e8f0')),
+                ('TEXTCOLOR', (0,1), (-1,-1), colors.HexColor('#1e293b')),
+                ('FONTSIZE', (0,1), (-1,-1), 9),
+            ]))
+            
+            elements.append(t)
+            doc.build(elements)
+            pdf_data = buffer.getvalue()
+            buffer.close()
+
             return Response(
-                content=pdf, 
+                content=pdf_data,
                 media_type="application/pdf",
                 headers={"Content-Disposition": "attachment; filename=transactions.pdf"}
             )
 
         else:
-            raise HTTPException(status_code=400, detail="Invalid export format. Supported formats: csv, pdf.")
+            raise HTTPException(status_code=400, detail="Invalid format. Supported formats: csv, pdf")
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Export error for user {user_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail="An error occurred while generating the export.")
+        logger.exception("Export generation failed")
+        raise HTTPException(status_code=500, detail=str(e))
