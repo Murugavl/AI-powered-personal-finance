@@ -282,6 +282,28 @@ def extract_discount(text: str) -> Optional[float]:
     return None
 
 
+def validate_image_magic_bytes(image_bytes: bytes) -> bool:
+    """Inspect actual file magic bytes and verify PIL image structure."""
+    if not image_bytes or len(image_bytes) < 12:
+        return False
+
+    is_jpeg = image_bytes[:3] == b"\xff\xd8\xff"
+    is_png = image_bytes[:8] == b"\x89PNG\r\n\x1a\n"
+    is_webp = image_bytes[:4] == b"RIFF" and image_bytes[8:12] == b"WEBP"
+    is_bmp = image_bytes[:2] == b"BM"
+    is_tiff = image_bytes[:4] in (b"II*\x00", b"MM\x00*")
+
+    if not (is_jpeg or is_png or is_webp or is_bmp or is_tiff):
+        return False
+
+    try:
+        with Image.open(io.BytesIO(image_bytes)) as img:
+            img.verify()
+        return True
+    except Exception:
+        return False
+
+
 # ─── Endpoint ─────────────────────────────────────────────────────────────────
 
 @router.post("/upload/")
@@ -298,13 +320,21 @@ async def upload_bill(
     if file.size and file.size > MAX_FILE_SIZE:
         raise HTTPException(status_code=413, detail="File too large. Maximum size is 5MB.")
 
-    # Validate content type
+    # Validate content type header
     allowed_types = {"image/jpeg", "image/jpg", "image/png", "image/webp", "image/bmp", "image/tiff"}
     if file.content_type and file.content_type not in allowed_types:
         raise HTTPException(status_code=415, detail=f"Unsupported file type: {file.content_type}. Use JPEG, PNG, or WebP.")
 
     try:
         image_bytes = await file.read()
+        
+        # Verify actual magic bytes and structure (prevents header spoofing)
+        if not validate_image_magic_bytes(image_bytes):
+            raise HTTPException(
+                status_code=415,
+                detail="Invalid or corrupted image file content. Uploaded file is not a valid image."
+            )
+
         logger.info(f"Processing bill upload for user {user_id[:8]}... ({len(image_bytes)} bytes)")
 
         # --- Multi-pass OCR (offloaded to threadpool to avoid blocking event loop) ---

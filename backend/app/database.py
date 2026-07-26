@@ -22,6 +22,9 @@ async def init_db_indexes():
         # Budgets indexes: user_id and compound user_id + category
         await db.budgets.create_index([("user_id", 1)], name="user_id_1")
         await db.budgets.create_index([("user_id", 1), ("category", 1)], name="user_id_1_category_1")
+        # Revoked tokens indexes: jti unique index & expires_at TTL auto-deletion
+        await db.revoked_tokens.create_index([("jti", 1)], name="jti_1", unique=True)
+        await db.revoked_tokens.create_index([("expires_at", 1)], name="expires_at_ttl", expireAfterSeconds=0)
         logger.info("MongoDB indexes initialized successfully.")
     except Exception as e:
         logger.error(f"Error creating MongoDB indexes: {e}")

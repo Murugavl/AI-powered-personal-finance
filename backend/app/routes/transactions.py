@@ -1,11 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException
+import logging
+from fastapi import APIRouter, Depends, HTTPException, Query
 from app.database import get_db
 from app.auth import get_current_user
 from bson import ObjectId
+from bson.errors import InvalidId
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 from motor.motor_asyncio import AsyncIOMotorDatabase
+
+logger = logging.getLogger(__name__)
 
 # Create a FastAPI router
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
@@ -33,7 +37,6 @@ async def add_transaction(
     try:
         # Atomic Budget Update using $inc
         if transaction.type == "expense":
-            # Normalize category for matching if needed, though here we match exactly
             await db.budgets.update_one(
                 {"category": transaction.category, "user_id": user_id}, 
                 {"$inc": {"spent": transaction.amount}}
@@ -45,10 +48,11 @@ async def add_transaction(
         await db.transactions.insert_one(txn_data)
         
         return {"message": "Transaction added and budget updated"}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-from fastapi import APIRouter, Depends, HTTPException, Query
+        logger.exception("Error adding transaction")
+        raise HTTPException(status_code=500, detail="An error occurred while processing your request.")
 
 # **2️ API to Fetch Transactions with Pagination & Filters**
 @router.get("/")
@@ -87,8 +91,11 @@ async def get_transactions(
             "skip": skip,
             "limit": limit
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Error fetching transactions")
+        raise HTTPException(status_code=500, detail="An error occurred while processing your request.")
 
 # **3️ API to Get a Single Transaction by ID**
 @router.get("/{transaction_id}", response_model=dict)
@@ -107,8 +114,13 @@ async def get_transaction(
         
         transaction["_id"] = str(transaction["_id"])
         return transaction
+    except InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid transaction ID format.")
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception(f"Error fetching transaction {transaction_id}")
+        raise HTTPException(status_code=500, detail="An error occurred while processing your request.")
 
 # **4️ API to Delete a Transaction**
 @router.delete("/{transaction_id}", response_model=dict)
@@ -126,8 +138,13 @@ async def delete_transaction(
             raise HTTPException(status_code=404, detail="Transaction not found")
 
         return {"message": "Transaction deleted successfully"}
+    except InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid transaction ID format.")
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception(f"Error deleting transaction {transaction_id}")
+        raise HTTPException(status_code=500, detail="An error occurred while processing your request.")
 
 # **5️ API to Update a Transaction**
 @router.put("/{transaction_id}", response_model=dict)
@@ -150,5 +167,10 @@ async def update_transaction(
             raise HTTPException(status_code=404, detail="Transaction not found")
 
         return {"message": "Transaction updated successfully"}
+    except InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid transaction ID format.")
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception(f"Error updating transaction {transaction_id}")
+        raise HTTPException(status_code=500, detail="An error occurred while processing your request.")

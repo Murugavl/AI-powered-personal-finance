@@ -81,3 +81,34 @@ async def get_me(db: AsyncIOMotorDatabase = Depends(get_db), user_id: str = Depe
     if not user:
         raise HTTPException(status_code=404, detail="User not found.")
     return {"id": str(user["_id"]), "username": user["username"], "email": user["email"]}
+
+
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from datetime import datetime
+from jose import jwt
+from app.config import settings
+
+auth_scheme = HTTPBearer()
+
+@router.post("/logout")
+async def logout(
+    credentials: HTTPAuthorizationCredentials = Depends(auth_scheme),
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """Revoke current user's token by storing jti in revoked_tokens collection."""
+    token = credentials.credentials
+    try:
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+        jti = payload.get("jti")
+        exp = payload.get("exp")
+        user_id = payload.get("sub")
+        if jti and exp:
+            expires_at = datetime.utcfromtimestamp(exp)
+            await db.revoked_tokens.update_one(
+                {"jti": jti},
+                {"$set": {"jti": jti, "user_id": user_id, "revoked_at": datetime.utcnow(), "expires_at": expires_at}},
+                upsert=True
+            )
+        return {"message": "Logged out successfully"}
+    except Exception:
+        return {"message": "Logged out successfully"}
