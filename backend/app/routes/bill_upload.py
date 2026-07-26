@@ -250,7 +250,7 @@ def extract_merchant(text: str) -> Optional[str]:
 
 
 def suggest_category(merchant: Optional[str], text: str) -> str:
-    """Suggest a transaction category based on merchant/receipt text."""
+    """Smart keyword-based category suggestion based on merchant name and receipt text."""
     combined = ((merchant or "") + " " + text).lower()
     for category, keywords in CATEGORY_KEYWORDS.items():
         if any(kw in combined for kw in keywords):
