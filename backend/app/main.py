@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes.expenses import router as expenses_router
+from app.config import settings
 from app.routes.transactions import router as transactions_router  
 from app.routes.accounts import router as accounts_router
 from app.routes.bill_upload import router as bill_upload_router  
@@ -11,9 +11,12 @@ from app.routes.chatbot import router as chatbot_router
 
 app = FastAPI(title="Finance App API", version="2.0.0")
 
+# Parse allowed origins from environment (comma-separated string)
+allowed_origins = [origin.strip() for origin in settings.ALLOWED_ORIGINS.split(",") if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True, 
     allow_methods=["*"],
     allow_headers=["*"],
@@ -21,7 +24,6 @@ app.add_middleware(
 
 # Include all routers
 app.include_router(auth_router)
-app.include_router(expenses_router)
 app.include_router(transactions_router)
 app.include_router(accounts_router)
 app.include_router(bill_upload_router)  
