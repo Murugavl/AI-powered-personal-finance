@@ -5,10 +5,11 @@ import { theme as designTheme } from "@/lib/theme";
 import {
   Home, CreditCard, DollarSign, PieChart, FileText,
   HelpCircle, Sun, Moon, LogOut, Upload, TrendingUp, User, Settings,
-  Menu, X
+  Menu, X, Bell
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 
+const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || "http://localhost:8000";
 
 const navItems = [
   { name: "Dashboard", path: "/", icon: Home },
@@ -24,9 +25,43 @@ export function Navbar() {
   const location = useLocation();
   const pathname = location.pathname;
   const { theme, toggleTheme } = useTheme();
-  const { user, logout } = useAuth();
+  const { user, logout, getAuthHeaders } = useAuth();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [alerts, setAlerts] = useState<any[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [alertsOpen, setAlertsOpen] = useState(false);
+
+  const fetchAlerts = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/alerts/`, { headers: getAuthHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        setAlerts(data.items || []);
+        setUnreadCount(data.unread_count || 0);
+      }
+    } catch {
+      // ignore
+    }
+  }, [getAuthHeaders]);
+
+  useEffect(() => {
+    if (user) {
+      fetchAlerts();
+      const interval = setInterval(fetchAlerts, 15000);
+      return () => clearInterval(interval);
+    }
+  }, [user, fetchAlerts]);
+
+  const markRead = async (id?: string) => {
+    try {
+      const url = id ? `${API_BASE_URL}/alerts/${id}/read` : `${API_BASE_URL}/alerts/read-all`;
+      await fetch(url, { method: "PATCH", headers: getAuthHeaders() });
+      fetchAlerts();
+    } catch {
+      // ignore
+    }
+  };
 
   return (
     <nav className="app-navbar" style={{
@@ -138,6 +173,75 @@ export function Navbar() {
           >
             {theme === "light" ? <Moon size={15} /> : <Sun size={15} />}
           </button>
+
+          {/* Notifications Bell */}
+          <div style={{ position: "relative" }}>
+            <button
+              onClick={() => setAlertsOpen(!alertsOpen)}
+              aria-label="Notifications"
+              title="Notifications"
+              style={{
+                width: "34px", height: "34px", borderRadius: "8px",
+                background: "rgba(30,41,59,0.6)", border: "1px solid rgba(30,41,59,1)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                cursor: "pointer", color: unreadCount > 0 ? "#f87171" : "#94a3b8",
+                position: "relative", transition: "all 0.2s",
+              }}
+            >
+              <Bell size={15} />
+              {unreadCount > 0 && (
+                <span style={{
+                  position: "absolute", top: "-4px", right: "-4px",
+                  width: "16px", height: "16px", borderRadius: "50%",
+                  background: "#ef4444", color: "white", fontSize: "0.65rem",
+                  fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
+            </button>
+
+            {/* Alerts Popover Dropdown */}
+            {alertsOpen && (
+              <div style={{
+                position: "absolute", right: 0, top: "calc(100% + 8px)",
+                width: "320px", borderRadius: "12px",
+                background: "rgba(15,23,42,0.98)", border: "1px solid rgba(124,58,237,0.3)",
+                boxShadow: "0 10px 25px rgba(0,0,0,0.5)", zIndex: 110, padding: "0.75rem",
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem", paddingBottom: "0.5rem", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
+                  <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "#e2e8f0" }}>Notifications</span>
+                  {unreadCount > 0 && (
+                    <button onClick={() => markRead()} style={{ background: "none", border: "none", color: "#a78bfa", fontSize: "0.75rem", cursor: "pointer" }}>
+                      Mark all read
+                    </button>
+                  )}
+                </div>
+                <div style={{ maxHeight: "280px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                  {alerts.length === 0 ? (
+                    <p style={{ color: "#64748b", fontSize: "0.8rem", textAlign: "center", margin: "1rem 0" }}>No notifications</p>
+                  ) : (
+                    alerts.map(a => (
+                      <div key={a._id} style={{
+                        padding: "0.6rem", borderRadius: "8px",
+                        background: a.read ? "rgba(30,41,59,0.3)" : "rgba(239,68,68,0.1)",
+                        border: a.read ? "1px solid rgba(255,255,255,0.05)" : "1px solid rgba(239,68,68,0.3)",
+                        fontSize: "0.78rem", color: "#e2e8f0",
+                        display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.5rem"
+                      }}>
+                        <p style={{ margin: 0, fontWeight: a.read ? 400 : 600, flex: 1 }}>{a.message}</p>
+                        {!a.read && (
+                          <button onClick={() => markRead(a._id)} title="Mark as read" style={{ background: "none", border: "none", color: "#a78bfa", cursor: "pointer", padding: 0 }}>
+                            ✓
+                          </button>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* User menu */}
           <div style={{ position: "relative" }}>

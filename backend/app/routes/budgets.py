@@ -76,6 +76,41 @@ async def delete_budget(
         logger.exception(f"Error deleting budget for {category}")
         raise HTTPException(status_code=500, detail="An error occurred while processing your request.")
 
+from datetime import datetime
+
+async def check_and_create_budget_alert(db: AsyncIOMotorDatabase, user_id: str, category: str):
+    """Check if category spent exceeds budget and insert an alert if breached."""
+    cat_lower = category.strip().lower()
+    budget_doc = await db.budgets.find_one({
+        "category": {"$regex": f"^{cat_lower}$", "$options": "i"},
+        "user_id": user_id
+    })
+    if not budget_doc:
+        return
+
+    spent = budget_doc.get("spent", 0.0)
+    target = budget_doc.get("budget", 0.0)
+
+    if target > 0 and spent > target:
+        existing_alert = await db.alerts.find_one({
+            "user_id": user_id,
+            "category": budget_doc["category"],
+            "read": False
+        })
+        if not existing_alert:
+            alert_doc = {
+                "user_id": user_id,
+                "category": budget_doc["category"],
+                "budget": target,
+                "spent": spent,
+                "message": f"Budget limit breached for '{budget_doc['category'].capitalize()}'! Spent ₹{spent:,.2f} of ₹{target:,.2f} limit.",
+                "created_at": datetime.utcnow(),
+                "read": False
+            }
+            await db.alerts.insert_one(alert_doc)
+            logger.warning(f"Inserted budget breach alert for user {user_id[:8]}, category {cat_lower}")
+
+
 @router.put("/{category}")
 async def update_budget(
     category: str,
@@ -94,6 +129,7 @@ async def update_budget(
             {"category": category_lower, "user_id": user_id},
             {"$set": {"spent": new_spent}}
         )
+        await check_and_create_budget_alert(db, user_id, category_lower)
         return {"message": "Budget updated successfully", "category": category, "new_spent": new_spent}
     except HTTPException:
         raise
@@ -120,6 +156,7 @@ async def update_spent(
             {"category": {"$regex": f"^{request.category}$", "$options": "i"}, "user_id": user_id},
             {"$inc": {"spent": request.amount}}
         )
+        await check_and_create_budget_alert(db, user_id, request.category)
         updated_budget = await db["budgets"].find_one({
             "category": {"$regex": f"^{request.category}$", "$options": "i"},
             "user_id": user_id

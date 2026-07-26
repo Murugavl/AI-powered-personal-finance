@@ -108,6 +108,8 @@ async def process_recurring(
         raise HTTPException(status_code=500, detail="An error occurred while processing recurring transactions.")
 
 
+from app.routes.budgets import check_and_create_budget_alert
+
 # **1️ API to Add a Transaction**
 @router.post("/")  
 async def add_transaction(
@@ -122,6 +124,7 @@ async def add_transaction(
                 {"category": transaction.category, "user_id": user_id}, 
                 {"$inc": {"spent": transaction.amount}}
             )
+            await check_and_create_budget_alert(db, user_id, transaction.category)
 
         # Insert Transaction with user_id
         txn_data = transaction.dict()
