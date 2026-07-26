@@ -1,251 +1,222 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { useAuth } from "@/components/AuthProvider";
 import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, Legend,
 } from "recharts";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+const API_URL = (import.meta as any).env?.VITE_API_URL || "http://localhost:8000";
+const COLORS = ["#7c3aed", "#3b82f6", "#10b981", "#f97316", "#ec4899", "#f59e0b"];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-// API Endpoint
-const TRANSACTIONS_API = `${process.env.NEXT_PUBLIC_API_URL}/transactions`;
-const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884D8", "#82CA9D"];
+const ChartTooltip = ({ active, payload, label }: any) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div style={{
+      background: "rgba(15,23,42,0.98)", border: "1px solid rgba(124,58,237,0.3)",
+      borderRadius: "10px", padding: "10px 14px",
+    }}>
+      <p style={{ color: "#94a3b8", fontSize: "0.75rem", marginBottom: "6px" }}>{label}</p>
+      {payload.map((e: any) => (
+        <div key={e.name} style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "3px" }}>
+          <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: e.color }} />
+          <span style={{ color: "#e2e8f0", fontSize: "0.82rem" }}>
+            {e.name}: <strong>₹{Number(e.value).toLocaleString()}</strong>
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+};
 
 export function ReportsInsightsPageComponent() {
+  const { getAuthHeaders } = useAuth();
   const [timeframe, setTimeframe] = useState("monthly");
-  const [transactions, setTransactions] = useState([]);
+  const [transactions, setTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // ✅ Fetch transactions from API
-  useEffect(() => {
-    const fetchTransactions = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch(`${TRANSACTIONS_API}?timestamp=${Date.now()}`, { cache: "no-store" });
+  const fetchTransactions = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/transactions/?t=${Date.now()}`, {
+        headers: getAuthHeaders(), cache: "no-store",
+      });
+      const data = await res.json();
+      setTransactions(Array.isArray(data) ? data : (data.items || []));
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [getAuthHeaders]);
 
-        if (!response.ok) throw new Error("Failed to fetch transactions");
+  useEffect(() => { fetchTransactions(); }, [timeframe, fetchTransactions]);
 
-        const data = await response.json();
-        setTransactions(data);
-      } catch (error) {
-        setError(error.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchTransactions();
-  }, [timeframe]);
-
-  // ✅ Process transactions for the Income vs. Expenses Trends graph
-  const processTransactions = () => {
-    const data = {};
-    const monthOrder = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  
+  // Monthly / Yearly chart data
+  const chartData = (() => {
+    const map: Record<string, { name: string; income: number; expenses: number }> = {};
     transactions.forEach(({ amount, type, date }) => {
-      const month = new Date(date).toLocaleString("default", { month: "short" });
-      const year = new Date(date).getFullYear().toString();
-      const key = timeframe === "monthly" ? month : year;
-  
-      if (!data[key]) {
-        data[key] = { name: key, income: 0, expenses: 0 };
-      }
-  
-      if (type === "income") {
-        data[key].income += amount;
-      } else {
-        data[key].expenses += amount;
-      }
+      const d = new Date(date);
+      const key = timeframe === "monthly" ? MONTHS[d.getMonth()] : d.getFullYear().toString();
+      if (!map[key]) map[key] = { name: key, income: 0, expenses: 0 };
+      if (type === "income") map[key].income += amount;
+      else map[key].expenses += amount;
     });
-  
-    // Convert object to sorted array based on month order
-    return Object.values(data).sort((a, b) => {
-      if (timeframe === "monthly") {
-        return monthOrder.indexOf(a.name) - monthOrder.indexOf(b.name);
-      }
-      return a.name.localeCompare(b.name); // Sort years numerically
+    if (timeframe === "monthly") return MONTHS.filter(m => map[m]).map(m => map[m]);
+    return Object.values(map).sort((a, b) => a.name.localeCompare(b.name));
+  })();
+
+  // Category breakdown
+  const categoryData = (() => {
+    const map: Record<string, number> = {};
+    transactions.filter(t => t.type === "expense").forEach(t => {
+      const cat = (t.category || "other").trim().toLowerCase();
+      map[cat] = (map[cat] || 0) + t.amount;
     });
-  };
-  
-
-  // ✅ Process spending categories
-  const processSpendingCategories = () => {
-    const categoryMap = {};
-
-    transactions.forEach(({ category, amount, type }) => {
-      if (type === "expense") {
-        const normalizedCategory = category.trim().toLowerCase();
-        categoryMap[normalizedCategory] = (categoryMap[normalizedCategory] || 0) + amount;
-      }
-    });
-
-    return Object.entries(categoryMap)
-      .map(([name, value]) => ({
-        name: name.charAt(0).toUpperCase() + name.slice(1),
-        value,
-      }))
+    return Object.entries(map)
+      .map(([name, value]) => ({ name: name.charAt(0).toUpperCase() + name.slice(1), value }))
       .sort((a, b) => b.value - a.value);
-  };
+  })();
 
-  const data = processTransactions();
-  const spendingCategories = processSpendingCategories();
-  const topSpendingCategories = spendingCategories.slice(0, 5); // ✅ Highest Expenses
-
-  const totalExpenses = transactions
-    .filter(({ type }) => type === "expense")
-    .reduce((sum, { amount }) => sum + amount, 0);
-  const totalIncome = transactions
-    .filter(({ type }) => type === "income")
-    .reduce((sum, { amount }) => sum + amount, 0);
+  const totalIncome = transactions.filter(t => t.type === "income").reduce((s, t) => s + t.amount, 0);
+  const totalExpenses = transactions.filter(t => t.type === "expense").reduce((s, t) => s + t.amount, 0);
   const netSavings = totalIncome - totalExpenses;
 
-  if (loading) return <p className="text-center text-lg">Loading...</p>;
-  if (error) return <p className="text-center text-red-500">Error: {error}</p>;
+  if (loading) return (
+    <div style={{ minHeight: "60vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ textAlign: "center" }}>
+        <div style={{ width: "36px", height: "36px", margin: "0 auto 1rem", border: "2px solid rgba(124,58,237,0.3)", borderTopColor: "#7c3aed", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+        <p style={{ color: "#64748b" }}>Loading reports...</p>
+      </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+
+  if (error) return <p style={{ color: "#f87171", textAlign: "center", padding: "2rem" }}>{error}</p>;
 
   return (
-    <div className="container mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-6">📊 Reports & Insights</h1>
-
-      <div className="mb-6">
-        <Select value={timeframe} onValueChange={setTimeframe}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Select timeframe" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="monthly">📅 Monthly</SelectItem>
-            <SelectItem value="yearly">📆 Yearly</SelectItem>
-          </SelectContent>
-        </Select>
+    <div style={{ padding: "2rem 1.5rem", maxWidth: "1200px", margin: "0 auto", fontFamily: "'Inter', sans-serif" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2rem", flexWrap: "wrap", gap: "1rem" }}>
+        <div>
+          <h1 style={{ fontSize: "1.875rem", fontWeight: 700, margin: 0 }}>Reports & Insights</h1>
+          <p style={{ color: "#64748b", fontSize: "0.875rem", marginTop: "0.25rem" }}>
+            {transactions.length} transactions analyzed
+          </p>
+        </div>
+        {/* Timeframe toggle */}
+        <div style={{ display: "flex", gap: "0.5rem", padding: "4px", borderRadius: "10px", border: "1px solid rgba(100,116,139,0.2)" }}>
+          {["monthly", "yearly"].map(t => (
+            <button key={t} onClick={() => setTimeframe(t)} style={{
+              padding: "0.4rem 1rem", borderRadius: "7px", fontSize: "0.82rem", fontWeight: 500,
+              cursor: "pointer", border: "none", textTransform: "capitalize",
+              background: timeframe === t ? "linear-gradient(135deg, #7c3aed, #3b82f6)" : "transparent",
+              color: timeframe === t ? "white" : "#64748b",
+              transition: "all 0.2s",
+            }}>{t}</button>
+          ))}
+        </div>
       </div>
 
-      {/* Income vs. Expenses Trends */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>📈 Income vs. Expenses Trends</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Line type="monotone" dataKey="income" stroke="#0088FE" />
-              <Line type="monotone" dataKey="expenses" stroke="#FF8042" />
-            </LineChart>
+      {/* Summary Cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "1rem", marginBottom: "2rem" }} className="summary-grid">
+        {[
+          { label: "Total Income", value: totalIncome, color: "#10b981", bg: "rgba(16,185,129,0.1)", border: "rgba(16,185,129,0.25)" },
+          { label: "Total Expenses", value: totalExpenses, color: "#f87171", bg: "rgba(248,113,113,0.1)", border: "rgba(248,113,113,0.25)" },
+          { label: "Net Savings", value: netSavings, color: netSavings >= 0 ? "#3b82f6" : "#f87171", bg: netSavings >= 0 ? "rgba(59,130,246,0.1)" : "rgba(248,113,113,0.1)", border: netSavings >= 0 ? "rgba(59,130,246,0.25)" : "rgba(248,113,113,0.25)" },
+        ].map(item => (
+          <div key={item.label} style={{
+            borderRadius: "1rem", padding: "1.5rem",
+            background: item.bg, border: `1px solid ${item.border}`,
+          }}>
+            <p style={{ color: "#94a3b8", fontSize: "0.8rem", fontWeight: 500, margin: "0 0 0.5rem" }}>{item.label}</p>
+            <p style={{ color: item.color, fontSize: "1.75rem", fontWeight: 700, margin: 0 }}>
+              {netSavings < 0 && item.label === "Net Savings" ? "-" : ""}₹{Math.abs(item.value).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {/* Main Chart */}
+      <div className="glass-card" style={{ padding: "1.5rem", marginBottom: "1.5rem" }}>
+        <h3 style={{ fontWeight: 600, marginBottom: "1.25rem" }}>
+          📈 Income vs Expenses — {timeframe === "monthly" ? "Monthly" : "Yearly"} Breakdown
+        </h3>
+        {chartData.length === 0 ? (
+          <div style={{ height: "280px", display: "flex", alignItems: "center", justifyContent: "center", color: "#64748b" }}>
+            No data available for this period
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={280}>
+            <AreaChart data={chartData}>
+              <defs>
+                <linearGradient id="incG" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#7c3aed" stopOpacity={0.35} />
+                  <stop offset="95%" stopColor="#7c3aed" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="expG" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#f87171" stopOpacity={0.35} />
+                  <stop offset="95%" stopColor="#f87171" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(100,116,139,0.2)" />
+              <XAxis dataKey="name" stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} />
+              <YAxis stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} tickFormatter={v => `₹${(v / 1000).toFixed(0)}k`} />
+              <Tooltip content={<ChartTooltip />} />
+              <Legend wrapperStyle={{ fontSize: "0.8rem" }} />
+              <Area type="monotone" dataKey="income" name="Income" stroke="#7c3aed" strokeWidth={2.5} fill="url(#incG)" />
+              <Area type="monotone" dataKey="expenses" name="Expenses" stroke="#f87171" strokeWidth={2.5} fill="url(#expG)" />
+            </AreaChart>
           </ResponsiveContainer>
-        </CardContent>
-      </Card>
-
-      {/* Financial Overview */}
-      <div className="grid gap-6 md:grid-cols-3 mb-6">
-        <Card className="bg-blue-100 border-l-4 border-blue-500">
-          <CardHeader>
-            <CardTitle className="text-blue-700">Total Income</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-blue-700">
-              ₹{totalIncome.toLocaleString()}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-red-100 border-l-4 border-red-500">
-          <CardHeader>
-            <CardTitle className="text-red-700">Total Expenses</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-red-700">
-              ₹{totalExpenses.toLocaleString()}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-green-100 border-l-4 border-green-500">
-          <CardHeader>
-            <CardTitle className="text-green-700">Net Savings</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-green-700">
-              ₹{netSavings.toLocaleString()}
-            </p>
-          </CardContent>
-        </Card>
+        )}
       </div>
 
-      {/* Charts Section */}
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Spending Categories Breakdown */}
-        {/* Spending Categories Breakdown */}
-        <Card>
-          <CardHeader>
-            <CardTitle>🛒 Spending Categories</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
+      {/* Category Charts */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }} className="cat-grid">
+        <div className="glass-card" style={{ padding: "1.5rem" }}>
+          <h3 style={{ fontWeight: 600, marginBottom: "1rem" }}>🛒 Spending by Category</h3>
+          {categoryData.length === 0 ? (
+            <div style={{ height: "240px", display: "flex", alignItems: "center", justifyContent: "center", color: "#64748b" }}>No expense data</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={240}>
               <PieChart>
-                <Pie
-                  data={spendingCategories}
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={80}
-                  dataKey="value"
-                  label={({ name, value }) =>
-                    `${name} ${(value / totalExpenses * 100).toFixed(2)}%`
-                  }
-                >
-                  {spendingCategories.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
+                <Pie data={categoryData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" paddingAngle={3}>
+                  {categoryData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                 </Pie>
-                <Tooltip />
-                <Legend />
+                <Tooltip formatter={(v: any) => [`₹${v.toLocaleString()}`, ""]} />
+                <Legend wrapperStyle={{ fontSize: "0.75rem" }} />
               </PieChart>
             </ResponsiveContainer>
-          </CardContent>
-        </Card>
+          )}
+        </div>
 
-
-        {/* Highest Expense Categories */}
-        <Card>
-          <CardHeader>
-            <CardTitle>💸 Highest Expense Categories</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={topSpendingCategories}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="value" fill="#FF8042" />
+        <div className="glass-card" style={{ padding: "1.5rem" }}>
+          <h3 style={{ fontWeight: 600, marginBottom: "1rem" }}>💸 Top Expense Categories</h3>
+          {categoryData.length === 0 ? (
+            <div style={{ height: "240px", display: "flex", alignItems: "center", justifyContent: "center", color: "#64748b" }}>No data</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={240}>
+              <BarChart data={categoryData.slice(0, 5)} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(100,116,139,0.2)" horizontal={false} />
+                <XAxis type="number" stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} tickFormatter={v => `₹${(v / 1000).toFixed(0)}k`} />
+                <YAxis type="category" dataKey="name" stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} width={80} />
+                <Tooltip formatter={(v: any) => [`₹${v.toLocaleString()}`, "Spent"]} />
+                <Bar dataKey="value" radius={[0, 6, 6, 0]}>
+                  {categoryData.slice(0, 5).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
-          </CardContent>
-        </Card>
+          )}
+        </div>
       </div>
+
+      <style>{`
+        @media (max-width: 640px) {
+          .summary-grid, .cat-grid { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
     </div>
   );
 }

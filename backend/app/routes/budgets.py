@@ -27,16 +27,27 @@ async def add_budget(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+from fastapi import APIRouter, HTTPException, Depends, Query
+
 @router.get("/")
 async def get_budgets(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
     db: AsyncIOMotorDatabase = Depends(get_db),
     user_id: str = Depends(get_current_user)
 ):
-    """Get all budgets for the current user."""
-    budgets = await db["budgets"].find({"user_id": user_id}).to_list(None)
+    """Get budgets for the current user with pagination."""
+    total = await db["budgets"].count_documents({"user_id": user_id})
+    budgets_cursor = db["budgets"].find({"user_id": user_id}).skip(skip).limit(limit)
+    budgets = await budgets_cursor.to_list(length=limit)
     for budget in budgets:
         budget["_id"] = str(budget["_id"])
-    return budgets
+    return {
+        "items": budgets,
+        "total": total,
+        "skip": skip,
+        "limit": limit
+    }
 
 @router.delete("/{category}")
 async def delete_budget(

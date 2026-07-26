@@ -1,169 +1,228 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, CreditCard, Wallet, Briefcase, ChevronDown, Search } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import {
-  Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle,
-} from "@/components/ui/card";
-import {
-  Dialog, DialogContent, DialogDescription, DialogFooter,
-  DialogHeader, DialogTitle, DialogTrigger
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue
-} from "@/components/ui/select";
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow
-} from "@/components/ui/table";
+import { useAuth } from "@/components/AuthProvider";
+import { Plus, Trash2, Wallet, CreditCard, Briefcase, Search } from "lucide-react";
 import { toast } from "react-toastify";
 
-// Interfaces
-interface Account {
-  name: string;
-  institution: string;
-  type: string;
-  balance: number;
-}
+const API_URL = (import.meta as any).env?.VITE_API_URL || "http://localhost:8000";
 
-interface Transaction {
-  date: string;
-  description: string;
-  amount: number;
-}
+const inputStyle = {
+  width: "100%", padding: "0.75rem 1rem",
+  borderRadius: "0.75rem", fontSize: "0.9rem", outline: "none",
+};
 
-// State
+const TYPE_ICONS: Record<string, any> = {
+  bank: Wallet, credit: CreditCard, investment: Briefcase,
+};
+const TYPE_COLORS: Record<string, string> = {
+  bank: "#7c3aed", credit: "#3b82f6", investment: "#10b981",
+};
+
 export default function AccountsPageComponent() {
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [filter, setFilter] = useState<string>("all");
-  const [searchTerm, setSearchTerm] = useState<string>("");
-  const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
-  const [newAccount, setNewAccount] = useState<Account>({
-    name: "", type: "", balance: 0, institution: ""
-  });
+  const { getAuthHeaders } = useAuth();
+  const [accounts, setAccounts] = useState<any[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterType, setFilterType] = useState("all");
+  const [showDialog, setShowDialog] = useState(false);
+  const [newAccount, setNewAccount] = useState({ name: "", type: "bank", balance: "", institution: "" });
+  const [saving, setSaving] = useState(false);
 
-
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-  // Fetch accounts from FastAPI
-  useEffect(() => {
-    fetch(`${apiUrl}/accounts`)
-      .then((res) => res.json())
-      .then((data) => setAccounts(data))
-      .catch((err) => console.error("Error fetching accounts:", err));
-  }, []);
-
-  // Fetch transactions when an account is selected
-  useEffect(() => {
-    if (selectedAccount) {
-      fetch(`${apiUrl}transactions/${selectedAccount.name}`)
-        .then((res) => res.json())
-        .then((data) => setTransactions(data))
-        .catch((err) => console.error("Error fetching transactions:", err));
+  const fetchAccounts = async () => {
+    const res = await fetch(`${API_URL}/accounts/`, { headers: getAuthHeaders() });
+    if (res.ok) {
+      const data = await res.json();
+      setAccounts(Array.isArray(data) ? data : (data.items || []));
     }
-  }, [selectedAccount]);
-
-  // Add new account
-  const handleAddAccount = (e: React.FormEvent) => {
-    e.preventDefault();
-    fetch(`${apiUrl}/accounts`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newAccount),
-    })
-      .then((res) => res.json())
-      .then(() => {
-        setNewAccount({ name: "", type: "", balance: 0, institution: "" });
-
-        // Show toast notification with longer duration
-        toast.success("Account added successfully!", {
-          autoClose: 3000, // Display for 3 seconds
-          position: "top-right",
-          hideProgressBar: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-          progress: undefined,
-        });
-
-        setTimeout(() => {
-          window.location.reload();
-        }, 3000); // Reload after 3 seconds to let the toast be visible
-      })
-      .catch((err) => console.error("Error adding account:", err));
   };
 
-  // Filter accounts
-  const filteredAccounts = accounts.filter((account) => {
-    if (filter !== "all" && account.type !== filter) return false;
-    if (searchTerm && !account.name.toLowerCase().includes(searchTerm.toLowerCase()))
-      return false;
+  useEffect(() => { fetchAccounts(); }, []);
+
+  const handleAddAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAccount.name || !newAccount.type || !newAccount.institution) {
+      toast.error("Please fill in all fields"); return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch(`${API_URL}/accounts/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify({ ...newAccount, balance: parseFloat(newAccount.balance) || 0 }),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail); }
+      toast.success("Account added!");
+      setShowDialog(false);
+      setNewAccount({ name: "", type: "bank", balance: "", institution: "" });
+      fetchAccounts();
+    } catch (e: any) {
+      toast.error(e.message || "Failed to add account");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Delete this account?")) return;
+    try {
+      const res = await fetch(`${API_URL}/accounts/${id}`, { method: "DELETE", headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Delete failed");
+      setAccounts(prev => prev.filter(a => a._id !== id));
+      toast.success("Account deleted");
+    } catch {
+      toast.error("Failed to delete account");
+    }
+  };
+
+  const filtered = accounts.filter(a => {
+    if (filterType !== "all" && a.type !== filterType) return false;
+    if (searchTerm && !a.name.toLowerCase().includes(searchTerm.toLowerCase())) return false;
     return true;
   });
 
-  // Account type icons
-  const getAccountIcon = (type: string) => {
-    switch (type) {
-      case "bank": return <Wallet className="h-4 w-4" />;
-      case "credit": return <CreditCard className="h-4 w-4" />;
-      case "investment": return <Briefcase className="h-4 w-4" />;
-      default: return <Wallet className="h-4 w-4" />;
-    }
-  };
+  const totalBalance = accounts.reduce((s, a) => s + (a.balance || 0), 0);
 
   return (
-    <div className="container mx-auto p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Accounts</h1>
-        <Dialog>
-          <DialogTrigger asChild>
-            <Button><Plus className="mr-2 h-4 w-4" /> Add Account</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Add New Account</DialogTitle>
-              <DialogDescription>Enter the details of your new account here.</DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleAddAccount} className="grid gap-4 py-4">
-              <Label>Account Name</Label>
-              <Input required value={newAccount.name} onChange={(e) => setNewAccount({ ...newAccount, name: e.target.value })} />
-              <Label>Account Type</Label>
-              <Select required onValueChange={(value) => setNewAccount({ ...newAccount, type: value })}>
-                <SelectTrigger><SelectValue placeholder="Select account type" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="bank">Bank</SelectItem>
-                  <SelectItem value="credit">Credit Card</SelectItem>
-                  <SelectItem value="investment">Investment</SelectItem>
-                </SelectContent>
-              </Select>
-              <Label>Institution</Label>
-              <Input required value={newAccount.institution} onChange={(e) => setNewAccount({ ...newAccount, institution: e.target.value })} />
-              <Label>Initial Balance</Label>
-              <Input required type="number" value={newAccount.balance} onChange={(e) => setNewAccount({ ...newAccount, balance: parseFloat(e.target.value) })} />
-              <DialogFooter>
-                <Button type="submit">Add Account</Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
+    <div style={{ padding: "2rem 1.5rem", maxWidth: "1200px", margin: "0 auto", fontFamily: "'Inter', sans-serif" }}>
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "2rem", flexWrap: "wrap", gap: "1rem" }}>
+        <div>
+          <h1 style={{ fontSize: "1.875rem", fontWeight: 700, margin: 0 }}>Accounts</h1>
+          <p style={{ color: "#64748b", fontSize: "0.875rem", marginTop: "0.25rem" }}>
+            {accounts.length} account{accounts.length !== 1 ? "s" : ""} · Total Balance: <strong style={{ color: "#7c3aed" }}>₹{totalBalance.toLocaleString()}</strong>
+          </p>
+        </div>
+        <button onClick={() => setShowDialog(true)} style={{
+          display: "flex", alignItems: "center", gap: "0.4rem", padding: "0.625rem 1.25rem",
+          background: "linear-gradient(135deg, #7c3aed, #3b82f6)", border: "none",
+          borderRadius: "0.75rem", color: "white", fontSize: "0.875rem", fontWeight: 600,
+          cursor: "pointer", boxShadow: "0 4px 12px rgba(124,58,237,0.3)",
+        }}>
+          <Plus size={15} /> Add Account
+        </button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {filteredAccounts.map((account) => (
-          <Card key={account.name} onClick={() => setSelectedAccount(account)} className="cursor-pointer">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-sm font-medium">{account.name}</CardTitle>
-              {getAccountIcon(account.type)}
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">₹{account.balance.toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground">{account.institution}</p>
-            </CardContent>
-          </Card>
-        ))}
+      {/* Filters */}
+      <div className="glass-card" style={{ marginBottom: "1.5rem", display: "flex", gap: "1rem", flexWrap: "wrap", padding: "1rem 1.5rem", alignItems: "center" }}>
+        <div style={{ position: "relative", flex: 1, minWidth: "200px" }}>
+          <Search size={16} color="#64748b" style={{ position: "absolute", left: "0.75rem", top: "50%", transform: "translateY(-50%)" }} />
+          <input type="text" placeholder="Search accounts..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
+            style={{ ...inputStyle, paddingLeft: "2.25rem" }} />
+        </div>
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          {["all", "bank", "credit", "investment"].map(type => (
+            <button key={type} onClick={() => setFilterType(type)} style={{
+              padding: "0.4rem 0.875rem", borderRadius: "0.625rem", fontSize: "0.78rem", fontWeight: 500,
+              cursor: "pointer", border: "1px solid",
+              background: filterType === type ? "rgba(124,58,237,0.15)" : "transparent",
+              borderColor: filterType === type ? "rgba(124,58,237,0.4)" : "rgba(100,116,139,0.3)",
+              color: filterType === type ? "#7c3aed" : "inherit",
+              transition: "all 0.2s", textTransform: "capitalize",
+            }}>{type}</button>
+          ))}
+        </div>
       </div>
+
+      {/* Account Cards */}
+      {filtered.length === 0 ? (
+        <div className="glass-card" style={{ textAlign: "center", padding: "3rem", color: "#64748b" }}>
+          {accounts.length === 0 ? "No accounts yet. Add one to get started." : "No accounts match your filters."}
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "1rem" }}>
+          {filtered.map(account => {
+            const Icon = TYPE_ICONS[account.type] || Wallet;
+            const color = TYPE_COLORS[account.type] || "#7c3aed";
+            const id = account._id || account.id;
+            return (
+              <div key={id} className="glass-card" style={{
+                padding: "1.5rem",
+                transition: "all 0.3s",
+                borderColor: `${color}30`,
+              }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1.25rem" }}>
+                  <div style={{
+                    width: "44px", height: "44px", borderRadius: "12px",
+                    background: `${color}15`, border: `1px solid ${color}30`,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    <Icon size={20} color={color} />
+                  </div>
+                  <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                    <span style={{
+                      padding: "0.2rem 0.6rem", borderRadius: "6px",
+                      background: `${color}15`, border: `1px solid ${color}25`,
+                      color: color, fontSize: "0.7rem", fontWeight: 600, textTransform: "capitalize",
+                    }}>{account.type}</span>
+                    <button onClick={() => handleDelete(id)} style={{
+                      width: "28px", height: "28px", borderRadius: "6px",
+                      background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)",
+                      cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "#f87171",
+                    }}>
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </div>
+                <h3 style={{ fontWeight: 600, fontSize: "1rem", margin: "0 0 0.25rem" }}>{account.name}</h3>
+                <p style={{ color: "#64748b", fontSize: "0.8rem", margin: "0 0 1rem" }}>{account.institution}</p>
+                <p style={{ color: color, fontSize: "1.5rem", fontWeight: 700, margin: 0 }}>
+                  ₹{(account.balance || 0).toLocaleString()}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Add Account Dialog */}
+      {showDialog && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)",
+          backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
+        }}>
+          <div className="glass-card" style={{
+            padding: "2rem", width: "100%", maxWidth: "420px",
+            boxShadow: "0 25px 50px rgba(0,0,0,0.3)",
+          }}>
+            <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "1.5rem" }}>Add New Account</h3>
+            <form onSubmit={handleAddAccount} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+              <div>
+                <label style={{ color: "#64748b", fontSize: "0.8rem", display: "block", marginBottom: "0.4rem" }}>Account Name</label>
+                <input style={inputStyle} required value={newAccount.name} onChange={e => setNewAccount({ ...newAccount, name: e.target.value })} placeholder="e.g. HDFC Savings" />
+              </div>
+              <div>
+                <label style={{ color: "#64748b", fontSize: "0.8rem", display: "block", marginBottom: "0.4rem" }}>Account Type</label>
+                <select value={newAccount.type} onChange={e => setNewAccount({ ...newAccount, type: e.target.value })}
+                  style={{ ...inputStyle, cursor: "pointer" }}>
+                  <option value="bank">Bank</option>
+                  <option value="credit">Credit Card</option>
+                  <option value="investment">Investment</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ color: "#64748b", fontSize: "0.8rem", display: "block", marginBottom: "0.4rem" }}>Institution</label>
+                <input style={inputStyle} required value={newAccount.institution} onChange={e => setNewAccount({ ...newAccount, institution: e.target.value })} placeholder="e.g. HDFC Bank" />
+              </div>
+              <div>
+                <label style={{ color: "#64748b", fontSize: "0.8rem", display: "block", marginBottom: "0.4rem" }}>Initial Balance (₹)</label>
+                <input style={inputStyle} type="number" required value={newAccount.balance} onChange={e => setNewAccount({ ...newAccount, balance: e.target.value })} placeholder="0" />
+              </div>
+              <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.5rem" }}>
+                <button type="button" onClick={() => setShowDialog(false)} style={{
+                  flex: 1, padding: "0.75rem", background: "rgba(100,116,139,0.15)", border: "1px solid rgba(100,116,139,0.3)",
+                  borderRadius: "0.75rem", color: "inherit", cursor: "pointer", fontSize: "0.875rem",
+                }}>Cancel</button>
+                <button type="submit" disabled={saving} style={{
+                  flex: 1, padding: "0.75rem", background: "linear-gradient(135deg, #7c3aed, #3b82f6)", border: "none",
+                  borderRadius: "0.75rem", color: "white", cursor: "pointer", fontSize: "0.875rem", fontWeight: 600,
+                }}>{saving ? "Adding..." : "Add Account"}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

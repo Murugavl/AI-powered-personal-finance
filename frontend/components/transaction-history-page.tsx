@@ -1,22 +1,22 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { format } from "date-fns";
-import { useRouter } from "next/navigation";
-import { Calendar as CalendarIcon, Search, Plus, Upload } from "lucide-react";
+import { format, isValid } from "date-fns";
+import { useNavigate } from "react-router-dom";
+import { Search, Plus, Upload, Trash2, X, AlertCircle, ArrowLeft, ArrowUpDown } from "lucide-react";
 import { toast } from "react-toastify";
+import { useAuth } from "@/components/AuthProvider";
 
-import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL;
+const API_URL = (import.meta as any).env?.VITE_API_URL || (import.meta as any).env?.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 const categories = [
   { label: "Food & Dining", value: "food", icon: "🍽️" },
+  { label: "Groceries", value: "groceries", icon: "🛒" },
+  { label: "Restaurants", value: "restaurants", icon: "🍽️" },
   { label: "Transportation", value: "transportation", icon: "🚗" },
+  { label: "Fuel", value: "fuel", icon: "⛽" },
   { label: "Housing", value: "housing", icon: "🏠" },
+  { label: "Rent", value: "rent", icon: "🏠" },
   { label: "Utilities", value: "utilities", icon: "💡" },
   { label: "Entertainment", value: "entertainment", icon: "🎭" },
   { label: "Shopping", value: "shopping", icon: "🛍️" },
@@ -24,167 +24,371 @@ const categories = [
   { label: "Travel", value: "travel", icon: "✈️" },
   { label: "Education", value: "education", icon: "📚" },
   { label: "Personal", value: "personal", icon: "👤" },
+  { label: "Salary", value: "salary", icon: "💼" },
+  { label: "Freelance", value: "freelance", icon: "💻" },
+  { label: "Investments", value: "investments", icon: "📈" },
   { label: "Income", value: "income", icon: "💰" },
 ];
 
+const formatDateSafely = (dateVal: any): string => {
+  if (!dateVal) return "—";
+  try {
+    const d = new Date(dateVal);
+    if (!isValid(d)) return String(dateVal);
+    return format(d, "dd MMM yyyy");
+  } catch {
+    return String(dateVal);
+  }
+};
+
 export function TransactionHistoryPageComponent() {
-  const router = useRouter();
-  const [transactions, setTransactions] = useState([]);
+  const navigate = useNavigate();
+  const { getAuthHeaders } = useAuth();
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [filtered, setFiltered] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
-  // File Upload State
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterType, setFilterType] = useState("all");
   const [file, setFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch transactions function
   const fetchTransactions = useCallback(async () => {
     setLoading(true);
+    setError("");
     try {
-      const response = await fetch(`${API_URL}/transactions/`);
+      const response = await fetch(`${API_URL}/transactions/`, {
+        headers: { ...getAuthHeaders() },
+      });
       if (!response.ok) throw new Error("Failed to fetch transactions");
-
       const data = await response.json();
-      setTransactions(data);
-    } catch (err) {
-      console.error("Error fetching transactions:", err);
-      setError("Failed to load transactions.");
+      const items = Array.isArray(data) ? data : (data.items || []);
+      setTransactions(items);
+      setFiltered(items);
+    } catch (err: any) {
+      setError("Failed to load transactions. Please check your backend connection.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [getAuthHeaders]);
 
   useEffect(() => {
     fetchTransactions();
   }, [fetchTransactions]);
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files && event.target.files.length > 0) {
-      const selectedFile = event.target.files[0];
-      setFile(selectedFile);
+  // Filter logic
+  useEffect(() => {
+    let result = Array.isArray(transactions) ? [...transactions] : [];
+    if (filterType !== "all") {
+      result = result.filter(t => t.type === filterType);
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(t =>
+        (t.description || "").toLowerCase().includes(q) ||
+        (t.category || "").toLowerCase().includes(q)
+      );
+    }
+    setFiltered(result);
+  }, [transactions, searchQuery, filterType]);
 
-      toast.info(`Selected file: ${selectedFile.name}`, { autoClose: 3000 });
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this transaction?")) return;
+    try {
+      const res = await fetch(`${API_URL}/transactions/${id}`, {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) throw new Error("Delete failed");
+      setTransactions(prev => prev.filter(t => (t._id || t.id) !== id));
+      toast.success("Transaction deleted successfully");
+    } catch {
+      toast.error("Failed to delete transaction");
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files?.[0]) {
+      setFile(e.target.files[0]);
+      toast.info(`Selected bill: ${e.target.files[0].name}`, { autoClose: 2000 });
     }
   };
 
   const handleUpload = async () => {
     if (!file) {
-      toast.error("Please select a file!");
+      toast.error("Please select a bill image first!");
       return;
     }
-
+    setUploading(true);
     const formData = new FormData();
     formData.append("file", file);
-
     try {
-      const response = await fetch(`${API_URL}/bills/upload/`, {
+      const res = await fetch(`${API_URL}/bills/upload/`, {
         method: "POST",
+        headers: getAuthHeaders(),
         body: formData,
       });
-
-      const text = await response.text();
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch (err) {
-        console.error("Error parsing JSON:", err);
-        toast.error("Unexpected server response. Check console.");
-        return;
-      }
-
-      if (response.ok) {
-        toast.success("Bill uploaded successfully!");
-        window.location.reload();
-
-        if (data.transactions) {
-          setTransactions((prev) => [...prev, ...data.transactions]);
-        } 
-        else {
-          console.log("No transactions found in the response.");
-        }
+      const data = await res.json();
+      if (res.ok) {
+        toast.success("Bill processed and transaction saved! ✓");
+        setFile(null);
+        fetchTransactions();
       } else {
-        toast.error(`Upload failed! Server Response: ${data.detail || "Unknown error"}`);
+        toast.error(data.detail || "Bill processing failed");
       }
-    } catch (error) {
-      console.error("Error uploading file:", error);
-      toast.error("Upload error: Check console logs.");
+    } catch {
+      toast.error("Upload error — please try again");
+    } finally {
+      setUploading(false);
     }
   };
 
   return (
-    <div className="container mx-auto p-6">
-      {/* Header with "Add Transaction" and "Upload Bill" Button */}
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Transaction History</h1>
-        <div className="flex gap-4 items-center">
-          <Button variant="default" onClick={() => router.push("/add-transaction")}>
-            <Plus className="h-4 w-4 mr-2" /> Add Transaction
-          </Button>
+    <div style={{
+      padding: "2rem 1.5rem",
+      maxWidth: "1200px",
+      margin: "0 auto",
+      fontFamily: "'Inter', sans-serif",
+      animation: "fadeInUp 0.4s ease both",
+    }}>
 
+      {/* Header */}
+      <div style={{
+        display: "flex", justifyContent: "space-between", alignItems: "flex-start",
+        marginBottom: "2rem", flexWrap: "wrap", gap: "1rem",
+      }}>
+        <div>
+          <h1 style={{ fontSize: "1.875rem", fontWeight: 700, margin: 0, color: "var(--text-main)" }}>
+            Transactions
+          </h1>
+          <p style={{ color: "var(--text-sub)", fontSize: "0.875rem", marginTop: "0.25rem" }}>
+            {filtered.length} transaction{filtered.length !== 1 ? "s" : ""} found
+          </p>
+        </div>
+
+        <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
           {/* Hidden File Input */}
-          <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            accept="image/*"
+            style={{ display: "none" }}
+          />
 
-          {/* Button to Open File Dialog */}
-          <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
-            <Upload className="h-4 w-4 mr-2" /> Upload Bill
-          </Button>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            style={{
+              display: "flex", alignItems: "center", gap: "0.4rem",
+              padding: "0.625rem 1.125rem",
+              background: "rgba(124,58,237,0.08)",
+              border: "1px solid rgba(124,58,237,0.25)",
+              borderRadius: "0.75rem", color: "#a78bfa", fontSize: "0.875rem", fontWeight: 600,
+              cursor: "pointer", transition: "all 0.2s",
+            }}
+          >
+            <Upload size={15} /> Upload Bill
+          </button>
 
-          {/* Show Selected File Name */}
-          {file && <span className="text-gray-700">{file.name}</span>}
-
-          {/* Upload & Process Button (Only visible if file selected) */}
           {file && (
-            <Button variant="default" onClick={handleUpload}>
-              Process Bill
-            </Button>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <span style={{ display: "flex", alignItems: "center", gap: "0.4rem", color: "#a78bfa", fontSize: "0.8rem", fontWeight: 500 }}>
+                {file.name}
+                <button onClick={() => setFile(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-sub)", padding: 0 }}>
+                  <X size={14} />
+                </button>
+              </span>
+              <button
+                onClick={handleUpload}
+                disabled={uploading}
+                style={{
+                  padding: "0.625rem 1.125rem",
+                  background: "linear-gradient(135deg, #7c3aed, #3b82f6)", border: "none",
+                  borderRadius: "0.75rem", color: "white", fontSize: "0.875rem", fontWeight: 600,
+                  cursor: uploading ? "not-allowed" : "pointer",
+                }}
+              >
+                {uploading ? "Processing..." : "Process Bill"}
+              </button>
+            </div>
           )}
+
+          <button
+            onClick={() => navigate("/add-transaction")}
+            style={{
+              display: "flex", alignItems: "center", gap: "0.4rem",
+              padding: "0.625rem 1.125rem",
+              background: "linear-gradient(135deg, #7c3aed, #3b82f6)", border: "none",
+              borderRadius: "0.75rem", color: "white", fontSize: "0.875rem", fontWeight: 600,
+              cursor: "pointer", boxShadow: "0 4px 12px rgba(124,58,237,0.3)",
+              transition: "all 0.2s",
+            }}
+          >
+            <Plus size={15} /> Add Transaction
+          </button>
         </div>
       </div>
 
-      {/* Transactions Table */}
-      {loading ? (
-        <p className="text-center text-gray-500">Loading transactions...</p>
-      ) : error ? (
-        <p className="text-center text-red-500">{error}</p>
-      ) : transactions.length === 0 ? (
-        <p className="text-center text-gray-500">No transactions found.</p>
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Date</TableHead>
-              <TableHead>Description</TableHead>
-              <TableHead>Category</TableHead>
-              <TableHead className="text-right">Amount</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {transactions.map((transaction) => {
-              const matchedCategory = categories.find(
-                (cat) => cat.value.toLowerCase() === transaction.category.toLowerCase()
-              );
+      {/* Filters Bar */}
+      <div className="glass-card" style={{ marginBottom: "1.5rem", display: "flex", gap: "1rem", flexWrap: "wrap", padding: "1rem 1.25rem", alignItems: "center" }}>
+        {/* Search Input */}
+        <div style={{ position: "relative", flex: 1, minWidth: "220px" }}>
+          <Search size={16} color="var(--text-sub)" style={{ position: "absolute", left: "0.875rem", top: "50%", transform: "translateY(-50%)" }} />
+          <input
+            type="text"
+            placeholder="Search by description or category..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="finance-input"
+            style={{
+              width: "100%", padding: "0.625rem 0.875rem 0.625rem 2.5rem",
+              borderRadius: "0.625rem", fontSize: "0.875rem", outline: "none",
+              border: "1px solid var(--card-border)",
+            }}
+          />
+        </div>
 
-              return (
-                <TableRow key={transaction.id}>
-                  <TableCell>{format(new Date(transaction.date), "PPP")}</TableCell>
-                  <TableCell>{transaction.description}</TableCell>
-                  <TableCell>
-                    {matchedCategory?.icon} {matchedCategory?.label || transaction.category}
-                  </TableCell>
-                  <TableCell
-                    className={cn(
-                      "text-right font-bold",
-                      transaction.type === "income" ? "text-green-500" : "text-red-500"
-                    )}
-                  >
-                    ₹{Math.abs(transaction.amount).toFixed(2)}
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      )}
+        {/* Filter Pills */}
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          {["all", "income", "expense"].map(type => (
+            <button
+              key={type}
+              onClick={() => setFilterType(type)}
+              style={{
+                padding: "0.5rem 1rem", borderRadius: "0.625rem", fontSize: "0.82rem", fontWeight: 600,
+                cursor: "pointer", border: "1px solid",
+                background: filterType === type ? "rgba(124,58,237,0.15)" : "transparent",
+                borderColor: filterType === type ? "rgba(124,58,237,0.4)" : "var(--card-border)",
+                color: filterType === type ? "#a78bfa" : "var(--text-sub)",
+                transition: "all 0.2s", textTransform: "capitalize",
+              }}
+            >
+              {type === "all" ? "All Transactions" : type === "income" ? "💰 Income" : "💸 Expense"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Main Table Card */}
+      <div className="glass-card" style={{ padding: "1.5rem" }}>
+        {loading ? (
+          <div style={{ textAlign: "center", padding: "3rem 1rem", color: "var(--text-sub)" }}>
+            <div style={{
+              width: "38px", height: "38px", margin: "0 auto 1rem",
+              border: "3px solid rgba(124,58,237,0.2)", borderTopColor: "#7c3aed",
+              borderRadius: "50%", animation: "spin 0.8s linear infinite",
+            }} />
+            <p style={{ margin: 0, fontSize: "0.9rem" }}>Loading transactions...</p>
+          </div>
+        ) : error ? (
+          <div style={{ textAlign: "center", padding: "3rem 1rem", color: "#f87171" }}>
+            <AlertCircle size={32} style={{ margin: "0 auto 0.75rem", opacity: 0.8 }} />
+            <p style={{ margin: 0, fontSize: "0.95rem", fontWeight: 600 }}>{error}</p>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "3.5rem 1rem", color: "var(--text-sub)" }}>
+            <div style={{
+              width: "56px", height: "56px", borderRadius: "50%", margin: "0 auto 1rem",
+              background: "rgba(124,58,237,0.08)", border: "1px solid rgba(124,58,237,0.15)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <Search size={24} color="#a78bfa" />
+            </div>
+            <p style={{ fontSize: "1rem", fontWeight: 600, color: "var(--text-main)", marginBottom: "0.35rem" }}>No transactions found</p>
+            <p style={{ fontSize: "0.825rem", margin: 0 }}>Try adjusting your search query or filters.</p>
+          </div>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid var(--card-border)" }}>
+                  {["Date", "Description", "Category", "Amount", "Actions"].map(h => (
+                    <th key={h} style={{
+                      padding: "0.875rem 1rem", textAlign: h === "Amount" ? "right" : h === "Actions" ? "center" : "left",
+                      color: "var(--text-sub)", fontSize: "0.75rem", fontWeight: 700,
+                      textTransform: "uppercase", letterSpacing: "0.06em",
+                    }}>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((t, i) => {
+                  const id = t._id || t.id;
+                  const catVal = (t.category || "").toLowerCase();
+                  const catObj = categories.find(c => c.value.toLowerCase() === catVal || c.label.toLowerCase() === catVal);
+                  const isIncome = t.type === "income";
+
+                  return (
+                    <tr key={id || i} style={{
+                      borderBottom: i < filtered.length - 1 ? "1px solid var(--card-border)" : "none",
+                      transition: "background 0.2s",
+                    }}
+                      onMouseEnter={e => (e.currentTarget.style.background = "rgba(124,58,237,0.04)")}
+                      onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                    >
+                      <td style={{ padding: "1rem", color: "var(--text-sub)", fontSize: "0.85rem", whiteSpace: "nowrap" }}>
+                        {formatDateSafely(t.date)}
+                      </td>
+                      <td style={{ padding: "1rem", fontSize: "0.9rem", fontWeight: 600, color: "var(--text-main)" }}>
+                        {t.description || "—"}
+                      </td>
+                      <td style={{ padding: "1rem" }}>
+                        <span style={{
+                          display: "inline-flex", alignItems: "center", gap: "0.35rem",
+                          padding: "0.3rem 0.65rem",
+                          background: "rgba(124,58,237,0.1)", borderRadius: "6px",
+                          border: "1px solid rgba(124,58,237,0.2)",
+                          color: "#a78bfa", fontSize: "0.78rem", fontWeight: 600,
+                        }}>
+                          {catObj?.icon || (isIncome ? "💰" : "🔖")} {catObj?.label || t.category || "General"}
+                        </span>
+                      </td>
+                      <td style={{ padding: "1rem", textAlign: "right" }}>
+                        <span style={{
+                          color: isIncome ? "#10b981" : "#f87171",
+                          fontWeight: 700, fontSize: "0.95rem",
+                        }}>
+                          {isIncome ? "+" : "−"}₹{Math.abs(t.amount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                        </span>
+                      </td>
+                      <td style={{ padding: "1rem", textAlign: "center" }}>
+                        <button
+                          onClick={() => handleDelete(id)}
+                          title="Delete transaction"
+                          style={{
+                            width: "32px", height: "32px", borderRadius: "8px",
+                            background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)",
+                            cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center",
+                            transition: "all 0.2s", color: "#f87171", margin: "0 auto",
+                          }}
+                          onMouseEnter={e => {
+                            (e.currentTarget as HTMLElement).style.background = "rgba(239,68,68,0.2)";
+                            (e.currentTarget as HTMLElement).style.borderColor = "rgba(239,68,68,0.4)";
+                          }}
+                          onMouseLeave={e => {
+                            (e.currentTarget as HTMLElement).style.background = "rgba(239,68,68,0.1)";
+                            (e.currentTarget as HTMLElement).style.borderColor = "rgba(239,68,68,0.25)";
+                          }}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <style>{`
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+      `}</style>
     </div>
   );
 }

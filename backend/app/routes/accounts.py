@@ -20,15 +20,26 @@ async def create_account(
     account_dict["_id"] = str(result.inserted_id)
     return account_dict
 
+from fastapi import APIRouter, HTTPException, Depends, Query
+
 @router.get("/")
 async def get_accounts(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
     db: AsyncIOMotorDatabase = Depends(get_db),
     user_id: str = Depends(get_current_user)
 ):
-    accounts = await db.accounts.find({"user_id": user_id}).to_list(100)
+    total = await db.accounts.count_documents({"user_id": user_id})
+    accounts_cursor = db.accounts.find({"user_id": user_id}).skip(skip).limit(limit)
+    accounts = await accounts_cursor.to_list(length=limit)
     for account in accounts:
         account["_id"] = str(account["_id"])
-    return accounts
+    return {
+        "items": accounts,
+        "total": total,
+        "skip": skip,
+        "limit": limit
+    }
 
 @router.get("/{account_id}")
 async def get_account(

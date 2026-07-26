@@ -1,6 +1,8 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
+from app.database import init_db_indexes
 from app.routes.transactions import router as transactions_router  
 from app.routes.accounts import router as accounts_router
 from app.routes.bill_upload import router as bill_upload_router  
@@ -9,7 +11,15 @@ from app.routes.export import router as export_router
 from app.routes.auth import router as auth_router
 from app.routes.chatbot import router as chatbot_router
 
-app = FastAPI(title="Finance App API", version="2.0.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Initialize MongoDB indexes on startup
+    await init_db_indexes()
+    yield
+
+app = FastAPI(title="Finance App API", version="2.0.0", lifespan=lifespan)
+
+
 
 # Parse allowed origins from environment (comma-separated string)
 allowed_origins = [origin.strip() for origin in settings.ALLOWED_ORIGINS.split(",") if origin.strip()]

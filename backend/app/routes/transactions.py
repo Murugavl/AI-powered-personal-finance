@@ -48,22 +48,45 @@ async def add_transaction(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# **2️ API to Fetch All Transactions**
-@router.get("/", response_model=List[dict])
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+# **2️ API to Fetch Transactions with Pagination & Filters**
+@router.get("/")
 async def get_transactions(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+    category: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
     db: AsyncIOMotorDatabase = Depends(get_db),
     user_id: str = Depends(get_current_user)
 ):
     try:
-        # Filter by user_id
-        transactions_cursor = db.transactions.find({"user_id": user_id})
-        transactions = await transactions_cursor.to_list(length=100)
+        query: dict = {"user_id": user_id}
+        if category and category.strip() and category.lower() != "all":
+            query["category"] = {"$regex": f"^{category.strip()}$", "$options": "i"}
+        if start_date or end_date:
+            date_filter = {}
+            if start_date:
+                date_filter["$gte"] = start_date
+            if end_date:
+                date_filter["$lte"] = end_date
+            query["date"] = date_filter
+
+        total = await db.transactions.count_documents(query)
+        transactions_cursor = db.transactions.find(query).sort("date", -1).skip(skip).limit(limit)
+        transactions = await transactions_cursor.to_list(length=limit)
 
         for transaction in transactions:
             transaction["_id"] = str(transaction["_id"])
             transaction["category"] = transaction.get("category", "Unknown")
 
-        return transactions
+        return {
+            "items": transactions,
+            "total": total,
+            "skip": skip,
+            "limit": limit
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
