@@ -26,6 +26,14 @@ class Budget(BaseModel):
     budget: float
     spent: float = 0.0  # Default spent amount
 
+# Savings Goal Model
+class Goal(BaseModel):
+    name: str
+    target_amount: float
+    current_amount: float = 0.0
+    target_date: Optional[str] = None
+    category: Optional[str] = "Savings"
+
 # User Models for custom auth
 class UserCreate(BaseModel):
     username: str

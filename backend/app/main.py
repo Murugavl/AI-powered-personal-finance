@@ -11,6 +11,7 @@ from app.routes.export import router as export_router
 from app.routes.auth import router as auth_router
 from app.routes.chatbot import router as chatbot_router
 from app.routes.alerts import router as alerts_router
+from app.routes.goals import router as goals_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -56,6 +57,7 @@ app.include_router(budgets_router)
 app.include_router(export_router) 
 app.include_router(chatbot_router)
 app.include_router(alerts_router)
+app.include_router(goals_router)
 
 @app.get("/")
 async def home():

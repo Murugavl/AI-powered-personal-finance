@@ -5,7 +5,7 @@ import { theme as designTheme } from "@/lib/theme";
 import {
   Home, CreditCard, DollarSign, PieChart, FileText,
   HelpCircle, Sun, Moon, LogOut, Upload, TrendingUp, User, Settings,
-  Menu, X, Bell
+  Menu, X, Bell, Target
 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 
@@ -16,6 +16,7 @@ const navItems = [
   { name: "Accounts", path: "/accounts", icon: CreditCard },
   { name: "Transactions", path: "/transactions", icon: DollarSign },
   { name: "Budgeting", path: "/budgeting", icon: PieChart },
+  { name: "Goals", path: "/goals", icon: Target },
   { name: "Reports", path: "/reports", icon: FileText },
   { name: "Export", path: "/export", icon: Upload },
   { name: "Help", path: "/help", icon: HelpCircle },
