@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/components/AuthProvider";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Plus, Trash2, Wallet, CreditCard, Briefcase, Search } from "lucide-react";
 import { toast } from "react-toastify";
 
@@ -25,6 +26,7 @@ export default function AccountsPageComponent() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState("all");
   const [showDialog, setShowDialog] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [newAccount, setNewAccount] = useState({ name: "", type: "bank", balance: "", institution: "" });
   const [saving, setSaving] = useState(false);
 
@@ -38,36 +40,32 @@ export default function AccountsPageComponent() {
 
   useEffect(() => { fetchAccounts(); }, []);
 
-  const handleAddAccount = async (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newAccount.name || !newAccount.type || !newAccount.institution) {
-      toast.error("Please fill in all fields"); return;
-    }
+    if (!newAccount.name.trim()) return;
     setSaving(true);
     try {
       const res = await fetch(`${API_URL}/accounts/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        method: "POST", headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify({ ...newAccount, balance: parseFloat(newAccount.balance) || 0 }),
       });
-      if (!res.ok) { const e = await res.json(); throw new Error(e.detail); }
+      if (!res.ok) throw new Error("Failed");
       toast.success("Account added!");
       setShowDialog(false);
       setNewAccount({ name: "", type: "bank", balance: "", institution: "" });
       fetchAccounts();
-    } catch (e: any) {
-      toast.error(e.message || "Failed to add account");
+    } catch {
+      toast.error("Failed to create account");
     } finally {
       setSaving(false);
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Delete this account?")) return;
+  const performDelete = async (id: string) => {
     try {
       const res = await fetch(`${API_URL}/accounts/${id}`, { method: "DELETE", headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Delete failed");
-      setAccounts(prev => prev.filter(a => a._id !== id));
+      setAccounts(prev => prev.filter(a => a._id !== id && a.id !== id));
       toast.success("Account deleted");
     } catch {
       toast.error("Failed to delete account");
@@ -75,15 +73,24 @@ export default function AccountsPageComponent() {
   };
 
   const filtered = accounts.filter(a => {
-    if (filterType !== "all" && a.type !== filterType) return false;
-    if (searchTerm && !a.name.toLowerCase().includes(searchTerm.toLowerCase())) return false;
-    return true;
+    const matchType = filterType === "all" || a.type === filterType;
+    const matchSearch = a.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        (a.institution || "").toLowerCase().includes(searchTerm.toLowerCase());
+    return matchType && matchSearch;
   });
 
   const totalBalance = accounts.reduce((s, a) => s + (a.balance || 0), 0);
 
   return (
     <div style={{ padding: "2rem 1.5rem", maxWidth: "1200px", margin: "0 auto", fontFamily: "'Inter', sans-serif" }}>
+      <ConfirmDialog
+        open={!!deletingId}
+        onOpenChange={(open) => !open && setDeletingId(null)}
+        title="Delete Account"
+        description="Are you sure you want to delete this account? This action cannot be undone."
+        onConfirm={() => deletingId && performDelete(deletingId)}
+      />
+
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "2rem", flexWrap: "wrap", gap: "1rem" }}>
         <div>
@@ -155,7 +162,7 @@ export default function AccountsPageComponent() {
                       background: `${color}15`, border: `1px solid ${color}25`,
                       color: color, fontSize: "0.7rem", fontWeight: 600, textTransform: "capitalize",
                     }}>{account.type}</span>
-                    <button onClick={() => handleDelete(id)} style={{
+                    <button onClick={() => setDeletingId(id)} aria-label="Delete account" style={{
                       width: "28px", height: "28px", borderRadius: "6px",
                       background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)",
                       cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
@@ -187,7 +194,7 @@ export default function AccountsPageComponent() {
             boxShadow: "0 25px 50px rgba(0,0,0,0.3)",
           }}>
             <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "1.5rem" }}>Add New Account</h3>
-            <form onSubmit={handleAddAccount} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+            <form onSubmit={handleCreate} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
               <div>
                 <label style={{ color: "#64748b", fontSize: "0.8rem", display: "block", marginBottom: "0.4rem" }}>Account Name</label>
                 <input style={inputStyle} required value={newAccount.name} onChange={e => setNewAccount({ ...newAccount, name: e.target.value })} placeholder="e.g. HDFC Savings" />

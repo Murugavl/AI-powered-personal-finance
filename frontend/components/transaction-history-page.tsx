@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { Search, Plus, Upload, Trash2, X, AlertCircle, ArrowLeft, ArrowUpDown } from "lucide-react";
 import { toast } from "react-toastify";
 import { useAuth } from "@/components/AuthProvider";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 const API_URL = (import.meta as any).env?.VITE_API_URL || (import.meta as any).env?.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -93,8 +94,9 @@ export function TransactionHistoryPageComponent() {
     setFiltered(result);
   }, [transactions, searchQuery, filterType]);
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this transaction?")) return;
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const performDelete = async (id: string) => {
     try {
       const res = await fetch(`${API_URL}/transactions/${id}`, {
         method: "DELETE",
@@ -152,6 +154,13 @@ export function TransactionHistoryPageComponent() {
       fontFamily: "'Inter', sans-serif",
       animation: "fadeInUp 0.4s ease both",
     }}>
+      <ConfirmDialog
+        open={!!deletingId}
+        onOpenChange={(open) => !open && setDeletingId(null)}
+        title="Delete Transaction"
+        description="Are you sure you want to delete this transaction? This action cannot be undone."
+        onConfirm={() => deletingId && performDelete(deletingId)}
+      />
 
       {/* Header */}
       <div style={{
@@ -356,7 +365,8 @@ export function TransactionHistoryPageComponent() {
                       </td>
                       <td style={{ padding: "1rem", textAlign: "center" }}>
                         <button
-                          onClick={() => handleDelete(id)}
+                          onClick={() => setDeletingId(id)}
+                          aria-label="Delete transaction"
                           title="Delete transaction"
                           style={{
                             width: "32px", height: "32px", borderRadius: "8px",

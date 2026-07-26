@@ -3,6 +3,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/components/AuthProvider";
+import { theme } from "@/lib/theme";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, BarChart, Bar, Legend,
@@ -72,7 +74,6 @@ export function Dashboard() {
     fetchAll();
   }, [getAuthHeaders]);
 
-  // Memoize computed stats & derived chart data
   const { totalBalance, totalIncome, totalExpenses, netSavings, recentTransactions, monthlyData, stats } = useMemo(() => {
     const accountsBalance = accounts.reduce((sum, a) => sum + (a.balance || 0), 0);
     const inc = transactions.filter(t => t.type === "income").reduce((sum, t) => sum + t.amount, 0);
@@ -135,16 +136,22 @@ export function Dashboard() {
 
   if (loading) {
     return (
-      <div style={{ minHeight: "80vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ textAlign: "center" }}>
-          <div style={{
-            width: "48px", height: "48px", margin: "0 auto 1rem",
-            border: "3px solid rgba(124,58,237,0.3)", borderTopColor: "#7c3aed",
-            borderRadius: "50%", animation: "spin 0.8s linear infinite",
-          }} />
-          <p style={{ color: "#64748b" }}>Loading your dashboard...</p>
+      <div style={{ padding: "2rem 1.5rem", maxWidth: "1400px", margin: "0 auto", fontFamily: "'Inter', sans-serif" }}>
+        <div style={{ marginBottom: "2rem" }}>
+          <Skeleton className="h-8 w-48 mb-2" />
+          <Skeleton className="h-4 w-72" />
         </div>
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1rem", marginBottom: "2rem" }}>
+          {[0, 1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-32 w-full rounded-2xl" />
+          ))}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "1.5rem", marginBottom: "2rem" }}>
+          <Skeleton className="h-80 w-full rounded-2xl" />
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "1.5rem" }}>
+          <Skeleton className="h-64 w-full rounded-2xl" />
+        </div>
       </div>
     );
   }
@@ -179,14 +186,15 @@ export function Dashboard() {
                   <p style={{ fontSize: "1.75rem", fontWeight: 700, margin: "0 0 0.35rem" }}>
                     {stat.value}
                   </p>
-                  <p style={{ color: "#64748b", fontSize: "0.75rem", margin: 0 }}>{stat.sub}</p>
+                  <p style={{ color: "var(--foreground-sub, #94a3b8)", fontSize: "0.75rem", margin: 0 }}>
+                    {stat.sub}
+                  </p>
                 </div>
                 <div style={{
-                  width: "44px", height: "44px", borderRadius: "12px",
-                  background: `${stat.color}20`, border: `1px solid ${stat.color}30`,
-                  display: "flex", alignItems: "center", justifyContent: "center",
+                  padding: "0.6rem", borderRadius: "12px",
+                  background: `${stat.color}18`, color: stat.color,
                 }}>
-                  <Icon size={20} color={stat.color} />
+                  <Icon size={22} />
                 </div>
               </div>
             </div>
@@ -194,14 +202,13 @@ export function Dashboard() {
         })}
       </div>
 
-      {/* Charts row */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 380px", gap: "1.5rem", marginBottom: "1.5rem" }} className="charts-grid">
-        {/* Area Chart */}
-        <div className="glass-card" style={{ padding: "1.5rem" }}>
+      {/* Charts section */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "1.5rem", marginBottom: "2rem" }}>
+        <div className="glass-card" style={{ padding: "1.5rem", borderRadius: "1.25rem" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
             <div>
-              <h3 style={{ fontSize: "1rem", fontWeight: 600, margin: 0 }}>Income vs Expenses</h3>
-              <p style={{ color: "#64748b", fontSize: "0.8rem", marginTop: "0.25rem" }}>Monthly breakdown</p>
+              <h2 style={{ fontSize: "1.1rem", fontWeight: 600, margin: 0 }}>Income vs Expenses</h2>
+              <p style={{ color: "#64748b", fontSize: "0.8rem", margin: "0.25rem 0 0" }}>Monthly aggregate breakdown</p>
             </div>
             <div style={{ display: "flex", gap: "1rem" }}>
               <span style={{ display: "flex", alignItems: "center", gap: "0.4rem", color: "#94a3b8", fontSize: "0.75rem" }}>
@@ -217,7 +224,7 @@ export function Dashboard() {
               <Activity size={40} color="#334155" />
               <p style={{ color: "#475569", fontSize: "0.875rem" }}>No transaction data yet</p>
               <button onClick={() => navigate("/add-transaction")} style={{
-                padding: "0.5rem 1rem", background: "linear-gradient(135deg, #7c3aed, #3b82f6)",
+                padding: "0.5rem 1rem", background: theme.gradients.primary,
                 border: "none", borderRadius: "8px", color: "white", fontSize: "0.8rem",
                 cursor: "pointer",
               }}>

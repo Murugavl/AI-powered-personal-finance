@@ -1,131 +1,232 @@
-"use client";
-
 import { useState, useEffect, useRef } from "react";
 import { Bot, Send, XCircle, Mic } from "lucide-react";
+import { useAuth } from "@/components/AuthProvider";
+import { theme } from "@/lib/theme";
+
+const API_URL = (import.meta as any).env?.VITE_API_URL || "http://localhost:8000";
 
 export default function Chatbot() {
+  const { getAuthHeaders } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<{ text: string; sender: "user" | "bot" }[]>([]);
+  const [messages, setMessages] = useState<{ text: string; sender: "user" | "bot" }[]>([
+    { text: "Hi! I'm your FinanceAI assistant. Ask me anything about your finances or how to use the app! 💬", sender: "bot" }
+  ]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
-  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const chatRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    if (chatRef.current) {
+      chatRef.current.scrollTop = chatRef.current.scrollHeight;
     }
   }, [messages]);
 
-  const toggleChat = () => setIsOpen(!isOpen);
-
-  // 🎙️ Speech-to-Text Function
-  const startListening = () => {
-    const recognition = new window.webkitSpeechRecognition() || new window.SpeechRecognition();
-    recognition.lang = "en-US";
-    recognition.start();
-
-    recognition.onresult = (event) => {
-      const speechText = event.results[0][0].transcript;
-      setInput(speechText);
-      sendMessage(speechText); // Automatically send message
-    };
-
-    recognition.onerror = (event) => {
-      console.error("Speech recognition error:", event.error);
-    };
-  };
-
   const sendMessage = async (text?: string) => {
-    const messageToSend = text || input;
-    if (!messageToSend.trim()) return;
+    const msg = text || input;
+    if (!msg.trim()) return;
 
-    const userMessage = { text: messageToSend, sender: "user" as const };
-    setMessages((prev) => [...prev, userMessage]);
+    setMessages(prev => [...prev, { text: msg, sender: "user" }]);
     setInput("");
     setIsTyping(true);
 
     try {
-      const response = await fetch("/api/chat", {
+      const response = await fetch(`${API_URL}/chat/`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: messageToSend }),
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({ message: msg }),
       });
 
-      if (!response.ok) throw new Error(`API Error: ${response.status}`);
-
+      if (!response.ok) throw new Error();
       const data = await response.json();
-      const botReply = data.reply || "Sorry, I couldn't process that.";
-
-      setMessages((prev) => [...prev, { text: botReply, sender: "bot" }]);
-
-      // Convert bot response to speech
-      speak(botReply);
+      setMessages(prev => [...prev, { text: data.reply || "Sorry, I couldn't process that.", sender: "bot" }]);
     } catch {
-      setMessages((prev) => [...prev, { text: "Sorry, I couldn't process that.", sender: "bot" }]);
+      setMessages(prev => [...prev, { text: "Sorry, I'm having trouble reaching the assistant. Please try again.", sender: "bot" }]);
     } finally {
       setIsTyping(false);
     }
   };
 
-  // Text-to-Speech Function
-  const speak = (text: string) => {
-    const synth = window.speechSynthesis;
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = "en-US";
-    synth.speak(utterance);
+  const startListening = () => {
+    try {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        setMessages(prev => [...prev, { text: "Voice input is not supported in this browser.", sender: "bot" }]);
+        return;
+      }
+      const recognition = new SpeechRecognition();
+      recognition.lang = "en-US";
+      recognition.start();
+      recognition.onresult = (event: any) => {
+        const speechText = event.results[0][0].transcript;
+        setInput(speechText);
+        sendMessage(speechText);
+      };
+      recognition.onerror = () => {
+        setMessages(prev => [...prev, { text: "Voice recognition error. Please try typing.", sender: "bot" }]);
+      };
+    } catch {
+      setMessages(prev => [...prev, { text: "Voice input unavailable.", sender: "bot" }]);
+    }
   };
 
   return (
     <>
+      {/* Toggle Button */}
       <button
-        onClick={toggleChat}
-        className="fixed bottom-5 right-5 bg-blue-600 text-white p-4 rounded-full shadow-lg hover:bg-blue-700 transition-all"
+        onClick={() => setIsOpen(!isOpen)}
+        aria-label="Toggle FinanceAI assistant"
+        style={{
+          position: "fixed", bottom: "1.5rem", right: "1.5rem",
+          width: "52px", height: "52px", borderRadius: "50%",
+          background: theme.gradients.primary,
+          border: "none", cursor: "pointer",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          boxShadow: "0 8px 24px rgba(124,58,237,0.4)",
+          transition: "transform 0.2s, box-shadow 0.2s",
+          zIndex: 500,
+        }}
+        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = "scale(1.1)"; }}
+        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = "scale(1)"; }}
       >
-        {isOpen ? <XCircle size={24} /> : <Bot size={24} />}
+        {isOpen ? <XCircle size={24} color="white" /> : <Bot size={24} color="white" />}
       </button>
 
+      {/* Chat Window */}
       {isOpen && (
-        <div className="fixed bottom-20 right-5 w-96 bg-white shadow-lg rounded-lg flex flex-col">
-          <div className="p-3 bg-blue-600 text-white flex justify-between items-center rounded-t-lg">
-            <span>Finance Chatbot</span>
-            <button onClick={toggleChat}>
-              <XCircle size={20} />
+        <div className="glass-card" style={{
+          position: "fixed", bottom: "5rem", right: "1.5rem",
+          width: "360px", maxHeight: "520px", height: "480px",
+          borderRadius: "1.25rem",
+          boxShadow: "0 25px 50px rgba(0,0,0,0.3)",
+          display: "flex", flexDirection: "column",
+          fontFamily: "'Inter', sans-serif",
+          zIndex: 499,
+          overflow: "hidden",
+        }}>
+          {/* Header */}
+          <div style={{
+            padding: "1rem 1.25rem",
+            background: "linear-gradient(135deg, rgba(124,58,237,0.15), rgba(59,130,246,0.1))",
+            borderBottom: "1px solid rgba(124,58,237,0.15)",
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
+              <div style={{
+                width: "32px", height: "32px", borderRadius: "8px",
+                background: theme.gradients.primary,
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <Bot size={17} color="white" />
+              </div>
+              <div>
+                <p style={{ fontSize: "0.875rem", fontWeight: 600, margin: 0 }}>FinanceAI Assistant</p>
+                <p style={{ color: "#10b981", fontSize: "0.7rem", margin: 0 }}>● Online AI</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setIsOpen(false)}
+              aria-label="Close assistant"
+              style={{ background: "none", border: "none", cursor: "pointer", color: "#64748b", padding: "4px" }}
+            >
+              <XCircle size={18} />
             </button>
           </div>
 
-          <div ref={chatContainerRef} className="p-3 h-80 overflow-y-auto">
-            {messages.map((msg, index) => (
-              <div
-                key={index}
-                className={`p-2 my-1 rounded-md max-w-[75%] ${
-                  msg.sender === "user" ? "bg-blue-500 text-white ml-auto" : "bg-gray-200"
-                }`}
-              >
-                {msg.text}
+          {/* Messages */}
+          <div ref={chatRef} style={{
+            flex: 1, overflowY: "auto", padding: "1rem",
+            display: "flex", flexDirection: "column", gap: "0.625rem",
+          }}>
+            {messages.map((msg, i) => (
+              <div key={i} style={{
+                display: "flex",
+                justifyContent: msg.sender === "user" ? "flex-end" : "flex-start",
+              }}>
+                <div style={{
+                  maxWidth: "78%", padding: "0.625rem 0.875rem",
+                  borderRadius: msg.sender === "user" ? "1rem 1rem 0.25rem 1rem" : "1rem 1rem 1rem 0.25rem",
+                  background: msg.sender === "user"
+                    ? theme.gradients.primary
+                    : "rgba(124,58,237,0.1)",
+                  border: msg.sender === "user" ? "none" : "1px solid rgba(124,58,237,0.2)",
+                  color: msg.sender === "user" ? "white" : "inherit", fontSize: "0.845rem", lineHeight: 1.5,
+                }}>
+                  {msg.text}
+                </div>
               </div>
             ))}
-            {isTyping && <div className="text-gray-500">Bot is typing...</div>}
+            {isTyping && (
+              <div style={{ display: "flex", gap: "4px", padding: "0.5rem" }}>
+                {[0, 1, 2].map(i => (
+                  <div key={i} style={{
+                    width: "6px", height: "6px", borderRadius: "50%",
+                    background: "#7c3aed",
+                    animation: `bounce 1s ease-in-out ${i * 0.2}s infinite`,
+                  }} />
+                ))}
+              </div>
+            )}
           </div>
 
-          <div className="p-3 flex items-center border-t">
+          {/* Input */}
+          <div style={{
+            padding: "0.75rem 1rem",
+            borderTop: "1px solid rgba(30,41,59,0.8)",
+            display: "flex", gap: "0.5rem", alignItems: "center",
+          }}>
             <input
               type="text"
-              className="flex-1 border p-2 rounded-md"
-              placeholder="Ask me about finances..."
+              placeholder="Ask about your finances..."
               value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && sendMessage()}
+              style={{
+                flex: 1, padding: "0.625rem 0.875rem",
+                background: "rgba(15,23,42,0.9)",
+                border: "1px solid rgba(30,41,59,1)",
+                borderRadius: "0.75rem", color: "#e2e8f0",
+                fontSize: "0.8rem", outline: "none",
+              }}
             />
-            <button onClick={() => sendMessage()} className="ml-2 bg-blue-500 text-white p-2 rounded-md">
-              <Send size={18} />
+            <button
+              onClick={() => sendMessage()}
+              aria-label="Send message"
+              style={{
+                width: "36px", height: "36px", borderRadius: "0.625rem",
+                background: theme.gradients.primary,
+                border: "none", cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
+              <Send size={15} color="white" />
             </button>
-            {/* 🎙️ Voice Button */}
-            <button onClick={startListening} className="ml-2 bg-green-500 text-white p-2 rounded-md">
-              <Mic size={18} />
+            <button
+              onClick={startListening}
+              aria-label="Voice input"
+              title="Voice input"
+              style={{
+                width: "36px", height: "36px", borderRadius: "0.625rem",
+                background: "rgba(16,185,129,0.15)", border: "1px solid rgba(16,185,129,0.3)",
+                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                flexShrink: 0, color: "#10b981",
+              }}
+            >
+              <Mic size={15} />
             </button>
           </div>
         </div>
       )}
+
+      <style>{`
+        @keyframes bounce {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-5px); }
+        }
+      `}</style>
     </>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/components/AuthProvider";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
   RadialBarChart, RadialBar, Legend,
@@ -82,8 +83,9 @@ export function BudgetingPageComponent() {
     }
   };
 
-  const deleteBudget = async (category: string) => {
-    if (!confirm(`Delete budget for "${category}"?`)) return;
+  const [deletingCategory, setDeletingCategory] = useState<string | null>(null);
+
+  const performDeleteBudget = async (category: string) => {
     try {
       const res = await fetch(`${API_URL}/budgets/${encodeURIComponent(category.toLowerCase())}`, {
         method: "DELETE", headers: getAuthHeaders(),
@@ -104,6 +106,13 @@ export function BudgetingPageComponent() {
 
   return (
     <div style={{ padding: "2rem 1.5rem", maxWidth: "1200px", margin: "0 auto", fontFamily: "'Inter', sans-serif" }}>
+      <ConfirmDialog
+        open={!!deletingCategory}
+        onOpenChange={(open) => !open && setDeletingCategory(null)}
+        title="Delete Budget"
+        description={deletingCategory ? `Are you sure you want to delete the budget for "${deletingCategory}"?` : ""}
+        onConfirm={() => deletingCategory && performDeleteBudget(deletingCategory)}
+      />
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2rem" }}>
         <div>
           <h1 style={{ fontSize: "1.875rem", fontWeight: 700, color: "#e2e8f0", margin: 0 }}>Budgeting</h1>
@@ -207,7 +216,10 @@ export function BudgetingPageComponent() {
                     ₹{spent.toLocaleString()} / ₹{item.budget.toLocaleString()}
                   </p>
                 </div>
-                <button onClick={() => deleteBudget(item.category)} style={{
+                <button
+                  onClick={() => setDeletingCategory(item.category)}
+                  aria-label="Delete budget"
+                  style={{
                   width: "28px", height: "28px", borderRadius: "6px",
                   background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)",
                   cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
