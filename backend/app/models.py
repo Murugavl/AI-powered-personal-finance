@@ -11,6 +11,7 @@ class Transaction(BaseModel):
     date: datetime = datetime.now()
     payment_method: Optional[str] = None
     notes: Optional[str] = None
+    recurrence_rule: str = "none"  # "none", "weekly", "monthly", "yearly"
 
 class Account(BaseModel):
     id: Optional[str] = None

@@ -11,6 +11,9 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 
 logger = logging.getLogger(__name__)
 
+from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
+
 # Create a FastAPI router
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
@@ -21,11 +24,89 @@ class TransactionSchema(BaseModel):
     description: str
     category: str
     isRecurring: bool = False
+    recurrence_rule: str = "none"  # "none", "weekly", "monthly", "yearly"
     type: str  # e.g., "income" or "expense"
 
     class Config:
         from_attributes = True
         json_encoders = {datetime: lambda v: v.isoformat()}
+
+
+async def process_user_recurring_transactions(db: AsyncIOMotorDatabase, user_id: str) -> int:
+    """Find recurring master transactions and generate due next occurrences."""
+    now = datetime.now()
+    cursor = db.transactions.find({
+        "user_id": user_id,
+        "recurrence_rule": {"$in": ["weekly", "monthly", "yearly"]}
+    })
+    masters = await cursor.to_list(length=200)
+
+    generated_count = 0
+    for master in masters:
+        rule = master.get("recurrence_rule", "none")
+        last_gen = master.get("last_recurring_generated") or master["date"]
+        if isinstance(last_gen, str):
+            try:
+                last_gen = datetime.fromisoformat(last_gen)
+            except Exception:
+                last_gen = master["date"]
+
+        if rule == "weekly":
+            next_date = last_gen + timedelta(weeks=1)
+        elif rule == "monthly":
+            next_date = last_gen + relativedelta(months=1)
+        elif rule == "yearly":
+            next_date = last_gen + relativedelta(years=1)
+        else:
+            continue
+
+        if next_date <= now:
+            master_id_str = str(master["_id"])
+            existing = await db.transactions.find_one({
+                "user_id": user_id,
+                "recurring_parent_id": master_id_str,
+                "date": next_date
+            })
+            if not existing:
+                new_txn = {
+                    "user_id": user_id,
+                    "amount": master["amount"],
+                    "category": master["category"],
+                    "description": f"{master['description']} (Recurring)",
+                    "type": master["type"],
+                    "date": next_date,
+                    "recurrence_rule": "none",
+                    "recurring_parent_id": master_id_str,
+                    "isRecurring": True
+                }
+                await db.transactions.insert_one(new_txn)
+                if master["type"] == "expense":
+                    await db.budgets.update_one(
+                        {"category": master["category"], "user_id": user_id},
+                        {"$inc": {"spent": master["amount"]}}
+                    )
+                await db.transactions.update_one(
+                    {"_id": master["_id"]},
+                    {"$set": {"last_recurring_generated": next_date}}
+                )
+                generated_count += 1
+
+    return generated_count
+
+
+@router.post("/process-recurring")
+async def process_recurring(
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    user_id: str = Depends(get_current_user)
+):
+    """Trigger generation of due recurring transactions for the current user."""
+    try:
+        count = await process_user_recurring_transactions(db, user_id)
+        return {"message": "Processed recurring transactions", "generated": count}
+    except Exception as e:
+        logger.exception("Error processing recurring transactions")
+        raise HTTPException(status_code=500, detail="An error occurred while processing recurring transactions.")
+
 
 # **1️ API to Add a Transaction**
 @router.post("/")  
@@ -45,6 +126,9 @@ async def add_transaction(
         # Insert Transaction with user_id
         txn_data = transaction.dict()
         txn_data["user_id"] = user_id
+        if txn_data.get("recurrence_rule") != "none":
+            txn_data["isRecurring"] = True
+            txn_data["last_recurring_generated"] = txn_data["date"]
         await db.transactions.insert_one(txn_data)
         
         return {"message": "Transaction added and budget updated"}
@@ -66,6 +150,9 @@ async def get_transactions(
     user_id: str = Depends(get_current_user)
 ):
     try:
+        # Auto-process due recurring items on fetch
+        await process_user_recurring_transactions(db, user_id)
+
         query: dict = {"user_id": user_id}
         if category and category.strip() and category.lower() != "all":
             query["category"] = {"$regex": f"^{category.strip()}$", "$options": "i"}

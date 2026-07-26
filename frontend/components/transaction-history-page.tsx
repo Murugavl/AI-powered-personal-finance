@@ -342,7 +342,17 @@ export function TransactionHistoryPageComponent() {
                         {formatDateSafely(t.date)}
                       </td>
                       <td style={{ padding: "1rem", fontSize: "0.9rem", fontWeight: 600, color: "var(--text-main)" }}>
-                        {t.description || "—"}
+                        <span>{t.description || "—"}</span>
+                        {(t.isRecurring || (t.recurrence_rule && t.recurrence_rule !== "none") || t.recurring_parent_id) && (
+                          <span style={{
+                            padding: "0.15rem 0.45rem", borderRadius: "4px",
+                            background: "rgba(59,130,246,0.15)", border: "1px solid rgba(59,130,246,0.3)",
+                            color: "#60a5fa", fontSize: "0.7rem", fontWeight: 600, marginLeft: "0.5rem",
+                            display: "inline-flex", alignItems: "center", gap: "0.2rem"
+                          }}>
+                            🔄 {t.recurrence_rule && t.recurrence_rule !== "none" ? t.recurrence_rule.toUpperCase() : "RECURRING"}
+                          </span>
+                        )}
                       </td>
                       <td style={{ padding: "1rem" }}>
                         <span style={{

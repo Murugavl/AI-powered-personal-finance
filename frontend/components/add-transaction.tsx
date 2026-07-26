@@ -157,6 +157,7 @@ const formSchema = z.object({
   description: z.string().min(2, { message: "Description must be at least 2 characters." }).max(200),
   category: z.string().optional(),
   type: z.enum(["expense", "income"]),
+  recurrence_rule: z.enum(["none", "weekly", "monthly", "yearly"]).default("none"),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -398,6 +399,29 @@ export function AddTransactionPageComponent() {
                     />
                   </PopoverContent>
                 </Popover>
+                <FormMessage />
+              </FormItem>
+            )} />
+
+            {/* ── Recurrence ─── */}
+            <FormField control={form.control} name="recurrence_rule" render={({ field }) => (
+              <FormItem>
+                <label style={{ color: "var(--text-sub)", fontSize: "0.8rem", fontWeight: 600, display: "block", marginBottom: "0.6rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Recurrence
+                </label>
+                <Select onValueChange={field.onChange} defaultValue={field.value || "none"}>
+                  <FormControl>
+                    <SelectTrigger style={{ height: "48px", fontSize: "0.9rem", background: "var(--card-bg)", color: "var(--text-main)", border: "1px solid var(--card-border)" }}>
+                      <SelectValue placeholder="Select recurrence" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="none">One-time (No Recurrence)</SelectItem>
+                    <SelectItem value="weekly">Every Week (Weekly)</SelectItem>
+                    <SelectItem value="monthly">Every Month (Monthly)</SelectItem>
+                    <SelectItem value="yearly">Every Year (Yearly)</SelectItem>
+                  </SelectContent>
+                </Select>
                 <FormMessage />
               </FormItem>
             )} />
