@@ -11,3 +11,4 @@ python-multipart
 Pillow
 bson
 passlib[bcrypt]
+reportlab>=4.0.0
