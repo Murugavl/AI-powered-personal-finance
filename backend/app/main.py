@@ -20,7 +20,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Finance App API", version="2.0.0", lifespan=lifespan)
 
+import os
+from fastapi.staticfiles import StaticFiles
 
+os.makedirs(os.path.join("uploads", "receipts"), exist_ok=True)
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # Parse allowed origins from environment (comma-separated string)
 allowed_origins = [origin.strip() for origin in settings.ALLOWED_ORIGINS.split(",") if origin.strip()]

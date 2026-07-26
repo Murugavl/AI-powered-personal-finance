@@ -4,6 +4,7 @@ instance/*
 .webassets-cache
 .env
 *.env
+backend/uploads/
 
 .git
 

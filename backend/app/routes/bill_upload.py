@@ -4,6 +4,8 @@ Improved multi-pass OCR with comprehensive keyword detection,
 auto-rotation, deskewing, and intelligent fallback extraction.
 """
 import io
+import os
+import uuid
 import re
 import math
 import datetime
@@ -391,6 +393,16 @@ async def upload_bill(
         category = suggest_category(merchant, combined_text)
         today = datetime.date.today().strftime("%Y-%m-%d")
 
+        # --- Save receipt image to local storage ---
+        save_dir = os.path.join("uploads", "receipts", user_id)
+        os.makedirs(save_dir, exist_ok=True)
+        ext = "png" if "png" in file.content_type.lower() else "jpg"
+        filename = f"receipt_{uuid.uuid4().hex[:12]}.{ext}"
+        file_path = os.path.join(save_dir, filename)
+        with open(file_path, "wb") as f:
+            f.write(image_bytes)
+        image_url = f"/uploads/receipts/{user_id}/{filename}".replace("\\", "/")
+
         # --- Save transaction ---
         transaction = {
             "user_id": user_id,
@@ -399,6 +411,7 @@ async def upload_bill(
             "type": "expense",
             "category": category.lower().replace(" ", "_"),
             "description": f"Bill from {merchant}" if merchant else "Bill (Auto-extracted)",
+            "image_url": image_url,
         }
 
         result = await db.transactions.insert_one(transaction)

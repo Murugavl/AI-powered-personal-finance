@@ -53,6 +53,7 @@ export function TransactionHistoryPageComponent() {
   const [filterType, setFilterType] = useState("all");
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [selectedReceipt, setSelectedReceipt] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchTransactions = useCallback(async () => {
@@ -373,7 +374,21 @@ export function TransactionHistoryPageComponent() {
                           {isIncome ? "+" : "−"}₹{Math.abs(t.amount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                         </span>
                       </td>
-                      <td style={{ padding: "1rem", textAlign: "center" }}>
+                      <td style={{ padding: "1rem", textAlign: "center", whiteSpace: "nowrap" }}>
+                        {t.image_url && (
+                          <button
+                            onClick={() => setSelectedReceipt(`${API_BASE_URL}${t.image_url}`)}
+                            title="View Original Receipt"
+                            style={{
+                              padding: "0.25rem 0.5rem", borderRadius: "6px",
+                              background: "rgba(124,58,237,0.15)", border: "1px solid rgba(124,58,237,0.3)",
+                              color: "#c4b5fd", fontSize: "0.75rem", fontWeight: 600, cursor: "pointer",
+                              marginRight: "0.5rem", display: "inline-flex", alignItems: "center", gap: "0.3rem"
+                            }}
+                          >
+                            📄 Receipt
+                          </button>
+                        )}
                         <button
                           onClick={() => setDeletingId(id)}
                           aria-label="Delete transaction"
@@ -404,6 +419,25 @@ export function TransactionHistoryPageComponent() {
           </div>
         )}
       </div>
+
+      {selectedReceipt && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)",
+          zIndex: 999, display: "flex", alignItems: "center", justifyContent: "center", padding: "1.5rem"
+        }} onClick={() => setSelectedReceipt(null)}>
+          <div style={{
+            background: "var(--card-bg)", borderRadius: "1rem", padding: "1.25rem",
+            maxWidth: "550px", width: "100%", maxHeight: "85vh", overflow: "auto",
+            position: "relative", border: "1px solid var(--card-border)"
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
+              <h3 style={{ margin: 0, color: "var(--text-main)", fontSize: "1rem", fontWeight: 700 }}>Original Receipt Image</h3>
+              <button onClick={() => setSelectedReceipt(null)} style={{ background: "none", border: "none", color: "var(--text-sub)", fontSize: "1.2rem", cursor: "pointer" }}>✕</button>
+            </div>
+            <img src={selectedReceipt} alt="Receipt" style={{ width: "100%", borderRadius: "0.5rem", objectFit: "contain" }} />
+          </div>
+        </div>
+      )}
 
       <style>{`
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
