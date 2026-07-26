@@ -2,14 +2,6 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
 
-# Expense Model
-class Expense(BaseModel):
-    title: str
-    amount: float
-    category: str
-    date: datetime = datetime.now()
-    notes: Optional[str] = None
-
 # Transaction Model
 class Transaction(BaseModel):
     type: str  # "income" or "expense"
