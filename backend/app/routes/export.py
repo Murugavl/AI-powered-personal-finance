@@ -16,13 +16,24 @@ router = APIRouter(prefix="/export", tags=["Export"])
 
 @router.get("/export-transactions")
 async def export_transactions(
-    format: str, 
+    format: str,
+    date_from: str = None,
+    date_to: str = None,
     db: AsyncIOMotorDatabase = Depends(get_db),
     user_id: str = Depends(get_current_user)
 ):
     try:
-        transactions_cursor = db.transactions.find({"user_id": user_id})
-        transactions = await transactions_cursor.to_list(length=1000)
+        query: dict = {"user_id": user_id}
+        if date_from or date_to:
+            date_filter: dict = {}
+            if date_from:
+                date_filter["$gte"] = date_from
+            if date_to:
+                date_filter["$lte"] = date_to
+            query["date"] = date_filter
+
+        transactions_cursor = db.transactions.find(query)
+        transactions = await transactions_cursor.to_list(length=5000)
 
         txns_list = []
         for txn in transactions:

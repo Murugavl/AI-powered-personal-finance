@@ -1,6 +1,8 @@
 fastapi
 uvicorn
 motor
+dnspython
+certifi
 pydantic-settings
 python-jose[cryptography]
 httpx
@@ -12,3 +14,4 @@ Pillow
 bson
 passlib[bcrypt]
 reportlab>=4.0.0
+

@@ -1,13 +1,23 @@
+import logging
+import certifi
 from motor.motor_asyncio import AsyncIOMotorClient
 from app.config import settings
 
-import logging
-
 logger = logging.getLogger(__name__)
 
-# Initialize MongoDB client using centralized settings
-client = AsyncIOMotorClient(settings.MONGO_URL)
-db = client.get_default_database() # or use setting for db name if needed
+# Initialize MongoDB client using centralized settings with certifi TLS support for Atlas
+client_kwargs = {}
+if "mongodb+srv" in settings.MONGO_URL:
+    client_kwargs["tlsCAFile"] = certifi.where()
+
+client = AsyncIOMotorClient(settings.MONGO_URL, **client_kwargs)
+
+try:
+    db = client.get_default_database()
+    if db is None or db.name == "admin" or db.name == "test":
+        db = client["AI_Finance"]
+except Exception:
+    db = client["AI_Finance"]
 
 def get_db():
     return db
