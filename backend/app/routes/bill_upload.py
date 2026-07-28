@@ -1,23 +1,47 @@
 """
 Bill Upload & OCR Route — FinanceAI
 Improved multi-pass OCR with comprehensive keyword detection,
-auto-rotation, deskewing, and intelligent fallback extraction.
+auto-rotation, deskewing, and intelligent GROQ Vision fallback extraction.
 """
 import io
 import os
 import uuid
 import re
 import math
+import json
+import base64
 import datetime
 import logging
 from typing import Optional
 
-import cv2
+try:
+    import cv2
+except ImportError:
+    cv2 = None
+
 import numpy as np
-import pytesseract
+
+try:
+    import pytesseract
+except ImportError:
+    pytesseract = None
+
+import httpx
 from PIL import Image, ImageFilter, ImageEnhance
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from fastapi.concurrency import run_in_threadpool
+
+from motor.motor_asyncio import AsyncIOMotorDatabase
+from app.database import get_db
+from app.auth import get_current_user
+from app.config import settings
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/bills", tags=["Bill Upload"])
+
+if pytesseract:
+    pytesseract.pytesseract.tesseract_cmd = settings.TESSERACT_PATH
+
 
 def process_ocr_pipeline(image_bytes: bytes) -> list[str]:
     """Synchronous CPU-bound multi-pass preprocessing and OCR pipeline."""
@@ -34,15 +58,6 @@ def process_ocr_pipeline(image_bytes: bytes) -> list[str]:
         except Exception as e:
             logger.debug(f"OCR variant {i} failed: {e}")
     return all_texts
-
-from motor.motor_asyncio import AsyncIOMotorDatabase
-from app.database import get_db
-from app.auth import get_current_user
-from app.config import settings
-
-logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/bills", tags=["Bill Upload"])
-pytesseract.pytesseract.tesseract_cmd = settings.TESSERACT_PATH
 
 # ─── Amount Keywords (ordered most-specific → least-specific) ────────────────
 AMOUNT_PATTERNS = [
@@ -93,6 +108,8 @@ CATEGORY_KEYWORDS = {
 
 def deskew_image(img_gray: np.ndarray) -> np.ndarray:
     """Detect and correct skew angle using Hough transform."""
+    if not cv2:
+        return img_gray
     try:
         edges = cv2.Canny(img_gray, 50, 150, apertureSize=3)
         lines = cv2.HoughLines(edges, 1, np.pi / 180, threshold=100)
@@ -127,6 +144,8 @@ def preprocess_image(image_bytes: bytes) -> list[np.ndarray]:
     Return multiple preprocessed image variants for multi-pass OCR.
     Handles rotated receipts, low contrast, noise.
     """
+    if not cv2:
+        return []
     variants = []
     try:
         pil_image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
@@ -196,11 +215,89 @@ def run_ocr(img_array: np.ndarray) -> str:
         try:
             config = f"--psm {psm} --oem 3"
             text = pytesseract.image_to_string(pil_img, config=config, lang="eng")
-            results.append(text)
-        except Exception:
-            pass
+            if text and text.strip():
+                results.append(text)
+        except Exception as e:
+            logger.warning(f"Tesseract OCR failed (psm={psm}): {e}")
+            # If Tesseract is not installed on system PATH, break early
+            break
     # Return the longest extracted text (most content)
     return max(results, key=len, default="")
+
+
+async def extract_bill_with_groq(image_bytes: bytes, content_type: Optional[str]) -> Optional[dict]:
+    """
+    Fallback bill extraction using GROQ Vision API (e.g. llama-3.2-11b-vision-preview).
+    Works seamlessly in deployed cloud environments without requiring local Tesseract binaries.
+    """
+    api_key = settings.GROQ_API_KEY or os.getenv("GROQ_API_KEY", "")
+    if not api_key:
+        logger.warning("GROQ_API_KEY is not configured for GROQ Vision fallback.")
+        return None
+
+    mime_type = content_type if (content_type and "image/" in content_type) else "image/jpeg"
+    base64_image = base64.b64encode(image_bytes).decode("utf-8")
+    data_url = f"data:{mime_type};base64,{base64_image}"
+
+    prompt = (
+        "You are an expert financial receipt and bill analyzer. Analyze this bill image carefully.\n"
+        "Extract key details and respond ONLY with a raw valid JSON object (no markdown, no ``` json formatting):\n"
+        "{\n"
+        '  "merchant": "Store or vendor name or null",\n'
+        '  "date": "YYYY-MM-DD or null",\n'
+        '  "amount": numeric_total_amount_payable_or_null,\n'
+        '  "tax": numeric_tax_amount_or_null,\n'
+        '  "discount": numeric_discount_amount_or_null,\n'
+        '  "category": "Groceries" | "Restaurants" | "Fuel" | "Pharmacy" | "Shopping" | "Utilities" | "Transport" | "Entertainment" | "Education" | "Shopping",\n'
+        '  "raw_text": "all readable text snippet from receipt"\n'
+        "}"
+    )
+
+    models_to_try = [
+        "llama-3.2-11b-vision-preview",
+        "llama-3.2-90b-vision-preview"
+    ]
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+
+    for model in models_to_try:
+        try:
+            payload = {
+                "model": model,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {"type": "image_url", "image_url": {"url": data_url}}
+                        ]
+                    }
+                ],
+                "temperature": 0.1,
+                "max_tokens": 1000,
+                "response_format": {"type": "json_object"}
+            }
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload)
+                if resp.status_code == 200:
+                    res_json = resp.json()
+                    choices = res_json.get("choices", [])
+                    if choices and choices[0].get("message", {}).get("content"):
+                        text_out = choices[0]["message"]["content"].strip()
+                        if text_out.startswith("```"):
+                            text_out = re.sub(r"^```(?:json)?\s*", "", text_out)
+                            text_out = re.sub(r"\s*```$", "", text_out)
+                        data = json.loads(text_out)
+                        logger.info(f"GROQ Vision successfully extracted bill details using model '{model}'")
+                        return data
+                else:
+                    logger.warning(f"GROQ Vision {model} returned HTTP status {resp.status_code}: {resp.text[:150]}")
+        except Exception as e:
+            logger.warning(f"GROQ Vision call with model {model} failed: {e}")
+
+    return None
 
 
 def extract_amount(text: str) -> Optional[float]:
@@ -316,7 +413,7 @@ async def upload_bill(
 ):
     """
     Upload a receipt/bill image.
-    Extracts: merchant, date, tax, discount, net amount, category suggestion.
+    Extracts: merchant, date, tax, discount, net amount, category suggestion using Tesseract OCR & GROQ Vision API.
     """
     MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
     if file.size and file.size > MAX_FILE_SIZE:
@@ -339,71 +436,112 @@ async def upload_bill(
 
         logger.info(f"Processing bill upload for user {user_id[:8]}... ({len(image_bytes)} bytes)")
 
-        # --- Multi-pass OCR (offloaded to threadpool to avoid blocking event loop) ---
+        # --- 1. Multi-pass Tesseract OCR (offloaded to threadpool) ---
         all_texts = await run_in_threadpool(process_ocr_pipeline, image_bytes)
 
-        if not all_texts:
-            raise HTTPException(status_code=400, detail="No text could be extracted from this image. Please upload a clearer photo.")
-
-        # --- Extract fields from all OCR passes ---
         net_amount: Optional[float] = None
-        best_text = ""
+        merchant: Optional[str] = None
+        extracted_date: Optional[str] = None
+        tax: Optional[float] = None
+        discount: Optional[float] = None
+        category: str = "Shopping"
         confidence = 0
 
-        for text in all_texts:
-            amount = extract_amount(text)
-            if amount is not None:
-                # Prefer the result from the earliest/most specific pattern match
-                if net_amount is None:
-                    net_amount = amount
-                    best_text = text
-                    confidence = 80
-                break  # First successful extraction wins
-
-        if net_amount is None:
-            # Last resort: grab the largest number in the text that looks like a price
-            all_numbers = []
+        # Try extracting fields from Tesseract OCR results
+        if all_texts:
             for text in all_texts:
-                nums = re.findall(r"[\₹\$\£\€]?\s*([\d,]+\.\d{2})\b", text)
-                for n in nums:
+                amount = extract_amount(text)
+                if amount is not None:
+                    if net_amount is None:
+                        net_amount = amount
+                        confidence = 80
+                    break
+
+            if net_amount is None:
+                # Largest number fallback
+                all_numbers = []
+                for text in all_texts:
+                    nums = re.findall(r"[\₹\$\£\€]?\s*([\d,]+\.\d{2})\b", text)
+                    for n in nums:
+                        try:
+                            val = float(n.replace(",", ""))
+                            if 0.01 <= val <= 999_999:
+                                all_numbers.append(val)
+                        except ValueError:
+                            pass
+                if all_numbers:
+                    net_amount = max(all_numbers)
+                    confidence = 40
+
+        # --- 2. GROQ Vision AI Fallback ---
+        # Trigger GROQ Vision if Tesseract failed or couldn't detect amount
+        if net_amount is None or not all_texts:
+            logger.info("Attempting GROQ Vision AI bill extraction...")
+            groq_result = await extract_bill_with_groq(image_bytes, file.content_type)
+            if groq_result:
+                if groq_result.get("amount") is not None:
                     try:
-                        val = float(n.replace(",", ""))
-                        if 0.01 <= val <= 999_999:
-                            all_numbers.append(val)
-                    except ValueError:
+                        net_amount = float(groq_result["amount"])
+                        confidence = 95
+                    except (ValueError, TypeError):
                         pass
-            if all_numbers:
-                net_amount = max(all_numbers)  # Take the largest (likely the total)
-                confidence = 40
-                logger.warning(f"Used largest-number fallback: ₹{net_amount}")
+                merchant = groq_result.get("merchant") or merchant
+                extracted_date = groq_result.get("date") or extracted_date
+                if groq_result.get("tax") is not None:
+                    try:
+                        tax = float(groq_result["tax"])
+                    except (ValueError, TypeError):
+                        pass
+                if groq_result.get("discount") is not None:
+                    try:
+                        discount = float(groq_result["discount"])
+                    except (ValueError, TypeError):
+                        pass
+                if groq_result.get("category"):
+                    category = str(groq_result["category"]).capitalize()
+                if groq_result.get("raw_text"):
+                    all_texts.append(str(groq_result["raw_text"]))
 
+        # --- 3. Validate extraction success ---
         if net_amount is None:
-            logger.warning(f"No amount found in receipt for user {user_id[:8]}")
-            raise HTTPException(
-                status_code=400,
-                detail="Could not detect a total amount in this receipt. Please ensure the receipt is clear and well-lit, then try again."
-            )
+            logger.warning(f"Could not detect amount for user {user_id[:8]}")
+            has_groq_key = bool(settings.GROQ_API_KEY or os.getenv("GROQ_API_KEY"))
+            if not has_groq_key:
+                err_detail = "No text could be extracted. Note: GROQ_API_KEY is not set on the server and Tesseract OCR may not be installed."
+            else:
+                err_detail = "Could not detect a clear total amount from this receipt image. Please ensure the bill is legible and well-lit."
+            raise HTTPException(status_code=400, detail=err_detail)
 
-        # --- Extract additional fields ---
-        combined_text = "\n".join(all_texts[:2])  # Use top 2 OCR results
-        merchant = extract_merchant(combined_text)
-        extracted_date = extract_date(combined_text)
-        tax = extract_tax(combined_text)
-        discount = extract_discount(combined_text)
-        category = suggest_category(merchant, combined_text)
+        # --- 4. Extract non-GROQ fields if missing ---
+        combined_text = "\n".join(all_texts[:2]) if all_texts else ""
+        if not merchant:
+            merchant = extract_merchant(combined_text)
+        if not extracted_date:
+            extracted_date = extract_date(combined_text)
+        if tax is None:
+            tax = extract_tax(combined_text)
+        if discount is None:
+            discount = extract_discount(combined_text)
+        if category == "Shopping" and (merchant or combined_text):
+            category = suggest_category(merchant, combined_text)
+
         today = datetime.date.today().strftime("%Y-%m-%d")
 
-        # --- Save receipt image to local storage ---
-        save_dir = os.path.join("uploads", "receipts", user_id)
-        os.makedirs(save_dir, exist_ok=True)
-        ext = "png" if "png" in file.content_type.lower() else "jpg"
-        filename = f"receipt_{uuid.uuid4().hex[:12]}.{ext}"
-        file_path = os.path.join(save_dir, filename)
-        with open(file_path, "wb") as f:
-            f.write(image_bytes)
-        image_url = f"/uploads/receipts/{user_id}/{filename}".replace("\\", "/")
+        # --- 5. Save receipt image safely (handling read-only filesystems gracefully) ---
+        image_url = None
+        try:
+            save_dir = os.path.join("uploads", "receipts", user_id)
+            os.makedirs(save_dir, exist_ok=True)
+            ext = "png" if "png" in (file.content_type or "").lower() else "jpg"
+            filename = f"receipt_{uuid.uuid4().hex[:12]}.{ext}"
+            file_path = os.path.join(save_dir, filename)
+            with open(file_path, "wb") as f:
+                f.write(image_bytes)
+            image_url = f"/uploads/receipts/{user_id}/{filename}".replace("\\", "/")
+        except Exception as file_err:
+            logger.warning(f"Could not save receipt image locally (read-only filesystem or path error): {file_err}")
 
-        # --- Save transaction ---
+        # --- 6. Save transaction in DB ---
         transaction = {
             "user_id": user_id,
             "date": extracted_date or today,

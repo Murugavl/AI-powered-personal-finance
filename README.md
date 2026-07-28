@@ -13,7 +13,7 @@ The AI-Powered Personal Finance Assistant helps users track expenses, analyze sp
 ## 🏗 Tech Stack
 - **Frontend**: React 18, Vite, React Router DOM, Tailwind CSS
 - **Backend**: FastAPI (Python), MongoDB (Motor Async Client)
-- **AI Models**: Google Gemini API for chatbot & AI insights
+- **AI Models**: GROQ API (LLaMA 3) for chatbot & AI receipt vision insights
 
 ## 🚀 Installation & Setup
 ### 1️⃣ Clone the Repository
@@ -50,7 +50,7 @@ npm run dev  # Start Vite development server
 | `GET`, `POST`, `PUT`, `DELETE` | `/accounts/` | Manage connected accounts |
 | `GET`, `POST`, `DELETE` | `/budgets/` | Manage monthly budgets & spending |
 | `POST` | `/upload-bill/` | Process receipt/bill images via OCR |
-| `POST` | `/chat/` | Query the Gemini AI financial assistant |
+| `POST` | `/chat/` | Query the GROQ AI financial assistant |
 | `GET` | `/export/transactions/pdf` | Generate and download PDF transaction statement |
 | `GET` | `/export/transactions/csv` | Export transactions data as CSV |
 

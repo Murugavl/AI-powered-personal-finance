@@ -25,7 +25,6 @@ services:
       - JWT_SECRET=${JWT_SECRET:-default_secret_key_change_in_production}
       - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
       - JWT_EXPIRE_MINUTES=${JWT_EXPIRE_MINUTES:-10080}
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
       - GROQ_API_KEY=${GROQ_API_KEY}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173,http://localhost:80}
     depends_on:
