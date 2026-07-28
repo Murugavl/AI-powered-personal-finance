@@ -28,12 +28,13 @@ os.makedirs(os.path.join("uploads", "receipts"), exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # Parse allowed origins from environment (comma-separated string)
-allowed_origins = [origin.strip() for origin in settings.ALLOWED_ORIGINS.split(",") if origin.strip()]
+allowed_origins = [origin.strip() for origin in settings.ALLOWED_ORIGINS.split(",") if origin.strip() and origin.strip() != "*"]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
-    allow_credentials=True, 
+    allow_origins=allowed_origins if allowed_origins else ["*"],
+    allow_origin_regex=r"https://.*\.vercel\.app|https://.*\.onrender\.com|http://localhost:\d+",
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
