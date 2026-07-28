@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { format, isValid } from "date-fns";
+import { format, isValid, parseISO, startOfDay, endOfDay } from "date-fns";
 import { useNavigate } from "react-router-dom";
-import { Search, Plus, Upload, Trash2, X, AlertCircle, ArrowLeft, ArrowUpDown } from "lucide-react";
+import { Search, Plus, Upload, Trash2, X, AlertCircle, ArrowLeft, ArrowUpDown, Calendar } from "lucide-react";
 import { toast } from "react-toastify";
 import { useAuth } from "@/components/AuthProvider";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -51,6 +51,8 @@ export function TransactionHistoryPageComponent() {
   const [error, setError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [selectedReceipt, setSelectedReceipt] = useState<string | null>(null);
@@ -79,7 +81,7 @@ export function TransactionHistoryPageComponent() {
     fetchTransactions();
   }, [fetchTransactions]);
 
-  // Filter logic
+  // Filter logic — type, search, date range
   useEffect(() => {
     let result = Array.isArray(transactions) ? [...transactions] : [];
     if (filterType !== "all") {
@@ -92,8 +94,16 @@ export function TransactionHistoryPageComponent() {
         (t.category || "").toLowerCase().includes(q)
       );
     }
+    if (dateFrom) {
+      const from = startOfDay(new Date(dateFrom));
+      result = result.filter(t => t.date && new Date(t.date) >= from);
+    }
+    if (dateTo) {
+      const to = endOfDay(new Date(dateTo));
+      result = result.filter(t => t.date && new Date(t.date) <= to);
+    }
     setFiltered(result);
-  }, [transactions, searchQuery, filterType]);
+  }, [transactions, searchQuery, filterType, dateFrom, dateTo]);
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -241,22 +251,46 @@ export function TransactionHistoryPageComponent() {
       </div>
 
       {/* Filters Bar */}
-      <div className="glass-card" style={{ marginBottom: "1.5rem", display: "flex", gap: "1rem", flexWrap: "wrap", padding: "1rem 1.25rem", alignItems: "center" }}>
+      <div className="glass-card" style={{ marginBottom: "1.5rem", display: "flex", gap: "0.75rem", flexWrap: "wrap", padding: "1rem 1.25rem", alignItems: "center" }}>
         {/* Search Input */}
-        <div style={{ position: "relative", flex: 1, minWidth: "220px" }}>
+        <div style={{ position: "relative", flex: "1 1 200px", minWidth: "180px" }}>
           <Search size={16} color="var(--text-sub)" style={{ position: "absolute", left: "0.875rem", top: "50%", transform: "translateY(-50%)" }} />
           <input
             type="text"
-            placeholder="Search by description or category..."
+            placeholder="Search description or category..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             className="finance-input"
-            style={{
-              width: "100%", padding: "0.625rem 0.875rem 0.625rem 2.5rem",
-              borderRadius: "0.625rem", fontSize: "0.875rem", outline: "none",
-              border: "1px solid var(--card-border)",
-            }}
+            style={{ width: "100%", padding: "0.625rem 0.875rem 0.625rem 2.5rem", borderRadius: "0.625rem", fontSize: "0.875rem" }}
           />
+        </div>
+
+        {/* Date Range */}
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flex: "1 1 280px" }}>
+          <Calendar size={15} color="var(--text-muted)" style={{ flexShrink: 0 }} />
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={e => setDateFrom(e.target.value)}
+            title="From date"
+            className="finance-input"
+            style={{ padding: "0.55rem 0.7rem", borderRadius: "0.5rem", fontSize: "0.82rem", flex: 1 }}
+          />
+          <span style={{ color: "var(--text-muted)", fontSize: "0.8rem", flexShrink: 0 }}>to</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={e => setDateTo(e.target.value)}
+            title="To date"
+            className="finance-input"
+            style={{ padding: "0.55rem 0.7rem", borderRadius: "0.5rem", fontSize: "0.82rem", flex: 1 }}
+          />
+          {(dateFrom || dateTo) && (
+            <button onClick={() => { setDateFrom(""); setDateTo(""); }} title="Clear dates"
+              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", display: "flex", padding: "0.2rem" }}>
+              <X size={14} />
+            </button>
+          )}
         </div>
 
         {/* Filter Pills */}
@@ -274,7 +308,7 @@ export function TransactionHistoryPageComponent() {
                 transition: "all 0.2s", textTransform: "capitalize",
               }}
             >
-              {type === "all" ? "All Transactions" : type === "income" ? "💰 Income" : "💸 Expense"}
+              {type === "all" ? "All" : type === "income" ? "💰 Income" : "💸 Expense"}
             </button>
           ))}
         </div>
@@ -377,7 +411,7 @@ export function TransactionHistoryPageComponent() {
                       <td style={{ padding: "1rem", textAlign: "center", whiteSpace: "nowrap" }}>
                         {t.image_url && (
                           <button
-                            onClick={() => setSelectedReceipt(`${API_BASE_URL}${t.image_url}`)}
+                            onClick={() => setSelectedReceipt(`${API_URL}${t.image_url}`)}
                             title="View Original Receipt"
                             style={{
                               padding: "0.25rem 0.5rem", borderRadius: "6px",

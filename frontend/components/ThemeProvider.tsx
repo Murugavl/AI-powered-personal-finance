@@ -1,38 +1,47 @@
-"use client"
-
-import { useEffect, useState, createContext, useContext } from "react"
+import { useEffect, useState, createContext, useContext } from "react";
 
 interface ThemeContextType {
-  theme: string
-  toggleTheme: () => void
+  theme: string;
+  toggleTheme: () => void;
 }
 
 const ThemeContext = createContext<ThemeContextType>({
-  theme: "light",
+  theme: "dark",
   toggleTheme: () => {},
-})
+});
 
 export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
-  const [theme, setTheme] = useState<string>("light")
+  const [theme, setTheme] = useState<string>(() => {
+    try {
+      return localStorage.getItem("finance_theme") || "dark";
+    } catch {
+      return "dark";
+    }
+  });
 
   useEffect(() => {
-    const root = window.document.documentElement
+    const root = window.document.documentElement;
     if (theme === "dark") {
-      root.classList.add("dark")
+      root.classList.add("dark");
     } else {
-      root.classList.remove("dark")
+      root.classList.remove("dark");
     }
-  }, [theme])
+    try {
+      localStorage.setItem("finance_theme", theme);
+    } catch {
+      // ignore
+    }
+  }, [theme]);
 
   const toggleTheme = () => {
-    setTheme(theme === "light" ? "dark" : "light")
-  }
+    setTheme(prev => (prev === "light" ? "dark" : "light"));
+  };
 
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme }}>
       {children}
     </ThemeContext.Provider>
-  )
-}
+  );
+};
 
-export const useTheme = () => useContext(ThemeContext)
+export const useTheme = () => useContext(ThemeContext);

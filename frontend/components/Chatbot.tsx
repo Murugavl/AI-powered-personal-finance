@@ -5,6 +5,117 @@ import { theme } from "@/lib/theme";
 
 const API_URL = (import.meta as any).env?.VITE_API_URL || "http://localhost:8000";
 
+function FormattedMessage({ text, sender }: { text: string; sender: "user" | "bot" }) {
+  if (!text) return null;
+
+  const lines = text.split("\n");
+
+  const parseInline = (content: string) => {
+    const parts = content.split(/(\*\*[^*]+\*\*)/g);
+    return parts.map((part, index) => {
+      if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
+        return (
+          <strong
+            key={index}
+            style={{
+              fontWeight: 600,
+              color: sender === "user" ? "#ffffff" : "#f8fafc",
+            }}
+          >
+            {part.slice(2, -2)}
+          </strong>
+        );
+      }
+      return part;
+    });
+  };
+
+  const elements: JSX.Element[] = [];
+  let currentList: JSX.Element[] = [];
+
+  const flushList = (keyPrefix: string) => {
+    if (currentList.length > 0) {
+      elements.push(
+        <ul
+          key={`ul-${keyPrefix}-${elements.length}`}
+          style={{
+            margin: "0.3rem 0",
+            paddingLeft: "1.1rem",
+            display: "flex",
+            flexDirection: "column",
+            gap: "0.25rem",
+            listStyleType: "disc",
+          }}
+        >
+          {currentList}
+        </ul>
+      );
+      currentList = [];
+    }
+  };
+
+  lines.forEach((line, idx) => {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushList(`${idx}`);
+      return;
+    }
+
+    const bulletMatch = trimmed.match(/^(?:[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}]?\s*)?(?:[*•\-]|(\d+\.))\s+(.*)/u);
+    if (bulletMatch && !trimmed.startsWith("http")) {
+      const content = bulletMatch[2];
+      currentList.push(
+        <li
+          key={idx}
+          style={{
+            lineHeight: 1.5,
+            color: sender === "user" ? "#ffffff" : "#e2e8f0",
+          }}
+        >
+          {parseInline(content)}
+        </li>
+      );
+    } else {
+      flushList(`${idx}`);
+      if (trimmed.startsWith("###") || trimmed.startsWith("##") || trimmed.startsWith("#")) {
+        const headerText = trimmed.replace(/^#+\s*/, "");
+        elements.push(
+          <div
+            key={idx}
+            style={{
+              fontWeight: 700,
+              fontSize: "0.875rem",
+              color: sender === "user" ? "#ffffff" : "#38bdf8",
+              marginTop: idx === 0 ? 0 : "0.4rem",
+              marginBottom: "0.2rem",
+            }}
+          >
+            {parseInline(headerText)}
+          </div>
+        );
+      } else {
+        elements.push(
+          <div
+            key={idx}
+            style={{
+              margin: "0.2rem 0",
+              lineHeight: 1.5,
+              wordBreak: "break-word",
+              color: sender === "user" ? "#ffffff" : "#e2e8f0",
+            }}
+          >
+            {parseInline(trimmed)}
+          </div>
+        );
+      }
+    }
+  });
+
+  flushList("end");
+
+  return <div style={{ display: "flex", flexDirection: "column", width: "100%" }}>{elements}</div>;
+}
+
 export default function Chatbot() {
   const { getAuthHeaders } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
@@ -98,9 +209,9 @@ export default function Chatbot() {
       {isOpen && (
         <div className="glass-card" style={{
           position: "fixed", bottom: "5rem", right: "1.5rem",
-          width: "360px", maxHeight: "520px", height: "480px",
+          width: "380px", maxHeight: "540px", height: "500px",
           borderRadius: "1.25rem",
-          boxShadow: "0 25px 50px rgba(0,0,0,0.3)",
+          boxShadow: "0 25px 50px rgba(0,0,0,0.35)",
           display: "flex", flexDirection: "column",
           fontFamily: "'Inter', sans-serif",
           zIndex: 499,
@@ -146,15 +257,15 @@ export default function Chatbot() {
                 justifyContent: msg.sender === "user" ? "flex-end" : "flex-start",
               }}>
                 <div style={{
-                  maxWidth: "78%", padding: "0.625rem 0.875rem",
+                  maxWidth: "85%", padding: "0.625rem 0.875rem",
                   borderRadius: msg.sender === "user" ? "1rem 1rem 0.25rem 1rem" : "1rem 1rem 1rem 0.25rem",
                   background: msg.sender === "user"
                     ? theme.gradients.primary
-                    : "rgba(124,58,237,0.1)",
-                  border: msg.sender === "user" ? "none" : "1px solid rgba(124,58,237,0.2)",
-                  color: msg.sender === "user" ? "white" : "inherit", fontSize: "0.845rem", lineHeight: 1.5,
+                    : "rgba(15, 23, 42, 0.75)",
+                  border: msg.sender === "user" ? "none" : "1px solid rgba(124,58,237,0.25)",
+                  color: msg.sender === "user" ? "white" : "#e2e8f0", fontSize: "0.845rem", lineHeight: 1.5,
                 }}>
-                  {msg.text}
+                  <FormattedMessage text={msg.text} sender={msg.sender} />
                 </div>
               </div>
             ))}

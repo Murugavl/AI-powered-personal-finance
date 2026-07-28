@@ -164,13 +164,7 @@ export function Navbar() {
             onClick={toggleTheme}
             aria-label="Toggle theme"
             title="Toggle theme"
-            style={{
-              width: "34px", height: "34px", borderRadius: "8px",
-              background: "rgba(30,41,59,0.6)", border: "1px solid rgba(30,41,59,1)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              cursor: "pointer", color: "#94a3b8",
-              transition: "all 0.2s",
-            }}
+            className="nav-icon-btn"
           >
             {theme === "light" ? <Moon size={15} /> : <Sun size={15} />}
           </button>
@@ -181,13 +175,8 @@ export function Navbar() {
               onClick={() => setAlertsOpen(!alertsOpen)}
               aria-label="Notifications"
               title="Notifications"
-              style={{
-                width: "34px", height: "34px", borderRadius: "8px",
-                background: "rgba(30,41,59,0.6)", border: "1px solid rgba(30,41,59,1)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                cursor: "pointer", color: unreadCount > 0 ? "#f87171" : "#94a3b8",
-                position: "relative", transition: "all 0.2s",
-              }}
+              className="nav-icon-btn"
+              style={unreadCount > 0 ? { color: "#f87171" } : {}}
             >
               <Bell size={15} />
               {unreadCount > 0 && (
@@ -204,14 +193,13 @@ export function Navbar() {
 
             {/* Alerts Popover Dropdown */}
             {alertsOpen && (
-              <div style={{
+              <div className="notif-dropdown" style={{
                 position: "absolute", right: 0, top: "calc(100% + 8px)",
                 width: "320px", borderRadius: "12px",
-                background: "rgba(15,23,42,0.98)", border: "1px solid rgba(124,58,237,0.3)",
-                boxShadow: "0 10px 25px rgba(0,0,0,0.5)", zIndex: 110, padding: "0.75rem",
+                zIndex: 110, padding: "0.75rem",
               }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem", paddingBottom: "0.5rem", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
-                  <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "#e2e8f0" }}>Notifications</span>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem", paddingBottom: "0.5rem", borderBottom: "1px solid var(--divider)" }}>
+                  <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--text-main)" }}>Notifications</span>
                   {unreadCount > 0 && (
                     <button onClick={() => markRead()} style={{ background: "none", border: "none", color: "#a78bfa", fontSize: "0.75rem", cursor: "pointer" }}>
                       Mark all read
@@ -220,14 +208,12 @@ export function Navbar() {
                 </div>
                 <div style={{ maxHeight: "280px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                   {alerts.length === 0 ? (
-                    <p style={{ color: "#64748b", fontSize: "0.8rem", textAlign: "center", margin: "1rem 0" }}>No notifications</p>
+                    <p style={{ color: "var(--text-muted)", fontSize: "0.8rem", textAlign: "center", margin: "1rem 0" }}>No notifications</p>
                   ) : (
                     alerts.map(a => (
-                      <div key={a._id} style={{
+                      <div key={a._id} className={`notif-item ${a.read ? "read" : "unread"}`} style={{
                         padding: "0.6rem", borderRadius: "8px",
-                        background: a.read ? "rgba(30,41,59,0.3)" : "rgba(239,68,68,0.1)",
-                        border: a.read ? "1px solid rgba(255,255,255,0.05)" : "1px solid rgba(239,68,68,0.3)",
-                        fontSize: "0.78rem", color: "#e2e8f0",
+                        fontSize: "0.78rem",
                         display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.5rem"
                       }}>
                         <p style={{ margin: 0, fontWeight: a.read ? 400 : 600, flex: 1 }}>{a.message}</p>
@@ -367,14 +353,6 @@ export function Navbar() {
 
       <style>{`
         .mobile-menu-toggle { display: flex; }
-        @media (min-width: 768px) {
-          .mobile-menu-toggle { display: none !important; }
-          .mobile-nav-drawer { display: none !important; }
-          .nav-label { display: inline !important; }
-        }
-        @media (max-width: 767px) {
-          .nav-label { display: none !important; }
-        }
       `}</style>
     </nav>
   );

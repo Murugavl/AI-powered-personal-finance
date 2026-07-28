@@ -324,44 +324,58 @@ export function AddTransactionPageComponent() {
               </FormItem>
             )} />
 
-            {/* ── Category ─── */}
+            {/* ── Category Chip Grid ─── */}
             <FormField control={form.control} name="category" render={({ field }) => (
               <FormItem>
                 <label style={{ color: "var(--text-sub)", fontSize: "0.8rem", fontWeight: 600, display: "block", marginBottom: "0.6rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                   Category
                 </label>
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger style={{
-                    height: "48px", fontSize: "0.9rem",
-                    background: "var(--card-bg)", color: "var(--text-main)",
-                    border: "1px solid var(--card-border)", borderRadius: "0.625rem",
-                  }}>
-                    <SelectValue placeholder="Select a category" />
-                  </SelectTrigger>
-                  <SelectContent style={{ maxHeight: "320px", background: "var(--card-bg)", color: "var(--text-main)", borderColor: "var(--card-border)" }}>
-                    {currentType === "income" ? (
-                      <SelectGroup>
-                        <SelectLabel>💰 Income Categories</SelectLabel>
-                        {incomeCategories.map(cat => (
-                          <SelectItem key={cat.value} value={cat.value}>
-                            {cat.icon} {cat.label}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    ) : (
-                      expenseGroups.map(group => (
-                        <SelectGroup key={group.group}>
-                          <SelectLabel>{group.group}</SelectLabel>
+                {/* Selected value badge */}
+                {field.value && (
+                  <div style={{ marginBottom: "0.75rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <span style={{ fontSize: "0.78rem", color: "var(--text-sub)" }}>Selected:</span>
+                    <span style={{
+                      padding: "0.25rem 0.75rem", borderRadius: "999px",
+                      background: "rgba(124,58,237,0.18)", border: "1px solid #7c3aed",
+                      color: "#a78bfa", fontSize: "0.82rem", fontWeight: 600,
+                    }}>
+                      {[...incomeCategories, ...expenseGroups.flatMap(g => g.categories)].find(c => c.value === field.value)?.icon}{" "}
+                      {[...incomeCategories, ...expenseGroups.flatMap(g => g.categories)].find(c => c.value === field.value)?.label}
+                    </span>
+                  </div>
+                )}
+                {currentType === "income" ? (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                    {incomeCategories.map(cat => (
+                      <button key={cat.value} type="button"
+                        className={`category-chip${field.value === cat.value ? " selected" : ""}`}
+                        onClick={() => field.onChange(cat.value)}
+                      >
+                        {cat.icon} {cat.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                    {expenseGroups.map(group => (
+                      <div key={group.group}>
+                        <p style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)", margin: "0 0 0.4rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                          {group.group}
+                        </p>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
                           {group.categories.map(cat => (
-                            <SelectItem key={cat.value} value={cat.value}>
+                            <button key={cat.value} type="button"
+                              className={`category-chip${field.value === cat.value ? " selected" : ""}`}
+                              onClick={() => field.onChange(cat.value)}
+                            >
                               {cat.icon} {cat.label}
-                            </SelectItem>
+                            </button>
                           ))}
-                        </SelectGroup>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <FormMessage />
               </FormItem>
             )} />

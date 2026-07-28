@@ -1,78 +1,301 @@
+/* ─── Google Fonts ─────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-body {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+/* ─── CSS Custom Properties ─────────────────────────────────── */
+:root {
+  /* Light mode tokens */
+  --page-bg: #f1f5f9;
+  --nav-bg: rgba(255, 255, 255, 0.92);
+  --nav-border: rgba(0, 0, 0, 0.08);
+  --card-bg: #ffffff;
+  --card-border: rgba(0, 0, 0, 0.08);
+  --card-shadow: 0 2px 12px rgba(0, 0, 0, 0.07), 0 1px 3px rgba(0, 0, 0, 0.05);
+  --card-shadow-hover: 0 8px 30px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
+  --text-main: #0f172a;
+  --text-sub: #475569;
+  --text-muted: #94a3b8;
+  --input-bg: #f8fafc;
+  --input-border: rgba(0, 0, 0, 0.15);
+  --divider: rgba(0, 0, 0, 0.08);
+
+  /* Shared brand tokens */
+  --accent-purple: #7c3aed;
+  --accent-blue: #3b82f6;
+  --accent-green: #10b981;
+  --accent-red: #ef4444;
+  --gradient-primary: linear-gradient(135deg, #7c3aed, #3b82f6);
+
+  /* Tailwind compatibility */
+  --background: 0 0% 96%;
+  --foreground: 222 47% 6%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 6%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 6%;
+  --primary: 262 84% 58%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 215 25% 95%;
+  --secondary-foreground: 222 47% 6%;
+  --muted: 215 25% 95%;
+  --muted-foreground: 215 16% 47%;
+  --accent: 215 25% 95%;
+  --accent-foreground: 222 47% 6%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 214 32% 91%;
+  --input: 214 32% 91%;
+  --ring: 262 84% 58%;
+  --radius: 0.625rem;
 }
 
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
-  }
+html.dark, .dark {
+  /* Dark mode tokens */
+  --page-bg: #060c1a;
+  --nav-bg: rgba(10, 18, 35, 0.92);
+  --nav-border: rgba(124, 58, 237, 0.18);
+  --card-bg: #0f1a2e;
+  --card-border: rgba(124, 58, 237, 0.18);
+  --card-shadow: 0 4px 24px rgba(0, 0, 0, 0.4), 0 1px 6px rgba(0, 0, 0, 0.3);
+  --card-shadow-hover: 0 12px 40px rgba(124, 58, 237, 0.2), 0 4px 12px rgba(0, 0, 0, 0.4);
+  --text-main: #f1f5f9;
+  --text-sub: #94a3b8;
+  --text-muted: #475569;
+  --input-bg: rgba(15, 23, 42, 0.8);
+  --input-border: rgba(100, 116, 139, 0.35);
+  --divider: rgba(124, 58, 237, 0.15);
+
+  /* Tailwind dark compatibility */
+  --background: 224 71% 4%;
+  --foreground: 213 31% 91%;
+  --card: 224 71% 8%;
+  --card-foreground: 213 31% 91%;
+  --popover: 224 71% 8%;
+  --popover-foreground: 213 31% 91%;
+  --primary: 263 100% 78%;
+  --primary-foreground: 224 71% 4%;
+  --secondary: 222 47% 15%;
+  --secondary-foreground: 213 31% 91%;
+  --muted: 222 47% 15%;
+  --muted-foreground: 215 16% 56%;
+  --accent: 222 47% 15%;
+  --accent-foreground: 213 31% 91%;
+  --destructive: 0 63% 31%;
+  --destructive-foreground: 213 31% 91%;
+  --border: 222 47% 18%;
+  --input: 222 47% 18%;
+  --ring: 263 100% 78%;
 }
 
+/* ─── Base Styles ───────────────────────────────────────────── */
 @layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 20 14.3% 4.1%;
-    --card: 0 0% 100%;
-    --card-foreground: 20 14.3% 4.1%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 20 14.3% 4.1%;
-    --primary: 24 9.8% 10%;
-    --primary-foreground: 60 9.1% 97.8%;
-    --secondary: 60 4.8% 95.9%;
-    --secondary-foreground: 24 9.8% 10%;
-    --muted: 60 4.8% 95.9%;
-    --muted-foreground: 25 5.3% 44.7%;
-    --accent: 60 4.8% 95.9%;
-    --accent-foreground: 24 9.8% 10%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 60 9.1% 97.8%;
-    --border: 20 5.9% 90%;
-    --input: 20 5.9% 90%;
-    --ring: 20 14.3% 4.1%;
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
-    --radius: 0.5rem;
-  }
-  .dark {
-    --background: 20 14.3% 4.1%;
-    --foreground: 60 9.1% 97.8%;
-    --card: 20 14.3% 4.1%;
-    --card-foreground: 60 9.1% 97.8%;
-    --popover: 20 14.3% 4.1%;
-    --popover-foreground: 60 9.1% 97.8%;
-    --primary: 60 9.1% 97.8%;
-    --primary-foreground: 24 9.8% 10%;
-    --secondary: 12 6.5% 15.1%;
-    --secondary-foreground: 60 9.1% 97.8%;
-    --muted: 12 6.5% 15.1%;
-    --muted-foreground: 24 5.4% 63.9%;
-    --accent: 12 6.5% 15.1%;
-    --accent-foreground: 60 9.1% 97.8%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 60 9.1% 97.8%;
-    --border: 12 6.5% 15.1%;
-    --input: 12 6.5% 15.1%;
-    --ring: 24 5.7% 82.9%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
-  }
-}
-
-@layer base {
-  * {
-    @apply border-border;
-  }
+  * { @apply border-border; }
   body {
-    @apply bg-background text-foreground;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--page-bg);
+    color: var(--text-main);
+    transition: background 0.3s ease, color 0.3s ease;
+    @apply antialiased;
   }
+}
+
+/* ─── Component Classes ─────────────────────────────────────── */
+
+/* Glass Card — the primary surface for all content panels */
+.glass-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 1rem;
+  box-shadow: var(--card-shadow);
+  transition: box-shadow 0.25s ease, transform 0.25s ease, border-color 0.25s ease;
+}
+
+.glass-card-hover:hover {
+  box-shadow: var(--card-shadow-hover);
+  border-color: rgba(124, 58, 237, 0.35);
+  transform: translateY(-2px);
+}
+
+/* Stat/metric cards with accent left border */
+.stat-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 1rem;
+  box-shadow: var(--card-shadow);
+  transition: box-shadow 0.25s ease, transform 0.25s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--gradient-primary);
+}
+
+/* Shared finance input style */
+.finance-input {
+  width: 100%;
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: 0.625rem;
+  color: var(--text-main);
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  font-family: inherit;
+}
+
+.finance-input:focus {
+  border-color: var(--accent-purple);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+}
+
+/* Shared page wrapper */
+.page-wrapper {
+  padding: 2rem 1.5rem;
+  max-width: 1200px;
+  margin: 0 auto;
+  font-family: 'Inter', sans-serif;
+}
+
+/* ─── Navbar ───────────────────────────────────────────────── */
+.app-navbar {
+  background: var(--nav-bg);
+  border-bottom: 1px solid var(--nav-border);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* Navbar icon button (theme toggle, bell) */
+.nav-icon-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-sub);
+  transition: all 0.2s;
+}
+
+.nav-icon-btn:hover {
+  background: rgba(124, 58, 237, 0.12);
+  border-color: rgba(124, 58, 237, 0.35);
+  color: #a78bfa;
+}
+
+/* ─── Notification Dropdown ────────────────────────────────── */
+.notif-dropdown {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  box-shadow: var(--card-shadow-hover);
+}
+
+.notif-item {
+  color: var(--text-main);
+}
+
+.notif-item.unread {
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.notif-item.read {
+  background: var(--input-bg);
+  border: 1px solid var(--card-border);
+}
+
+/* ─── Animations ────────────────────────────────────────────── */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeInScale {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes shimmer {
+  from { background-position: -200% 0; }
+  to   { background-position: 200% 0; }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.7; transform: scale(1.15); }
+}
+
+.animate-fadeInUp    { animation: fadeInUp 0.4s ease forwards; }
+.animate-fadeInScale { animation: fadeInScale 0.25s ease forwards; }
+
+/* ─── Skeleton / Loading ────────────────────────────────────── */
+.skeleton-shimmer {
+  background: linear-gradient(90deg,
+    var(--card-border) 25%,
+    var(--input-bg) 50%,
+    var(--card-border) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s infinite;
+  border-radius: 0.5rem;
+}
+
+/* ─── Category Chip Grid ────────────────────────────────────── */
+.category-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--card-border);
+  background: var(--input-bg);
+  color: var(--text-sub);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+
+.category-chip:hover {
+  border-color: rgba(124, 58, 237, 0.5);
+  color: #a78bfa;
+  background: rgba(124, 58, 237, 0.08);
+}
+
+.category-chip.selected {
+  border-color: #7c3aed;
+  background: rgba(124, 58, 237, 0.18);
+  color: #a78bfa;
+  font-weight: 600;
+}
+
+/* ─── Utilities ─────────────────────────────────────────────── */
+@layer utilities {
+  .text-balance { text-wrap: balance; }
+}
+
+/* ─── Responsive ────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  .nav-label      { display: none !important; }
+  .mobile-menu-toggle { display: flex; }
+}
+@media (min-width: 768px) {
+  .mobile-menu-toggle { display: none !important; }
+  .mobile-nav-drawer  { display: none !important; }
+  .nav-label          { display: inline !important; }
 }
