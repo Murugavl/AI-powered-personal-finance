@@ -13,5 +13,6 @@ python-multipart
 Pillow
 passlib[bcrypt]
 python-dotenv
+python-dateutil
 reportlab>=4.0.0
 
