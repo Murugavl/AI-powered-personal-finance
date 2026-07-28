@@ -8,8 +8,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { toast } from "react-toastify";
-
-const API_URL = (import.meta as any).env?.VITE_API_URL || "http://localhost:8000";
+import { API_URL } from "@/lib/config";
 
 type ExportFormat = "csv" | "pdf";
 type ExportState = "idle" | "loading" | "success" | "error";

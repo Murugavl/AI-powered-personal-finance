@@ -8,8 +8,8 @@ import {
 } from "recharts";
 import { AlertTriangle, Plus, Trash2, ChevronDown } from "lucide-react";
 import { toast } from "react-toastify";
+import { API_URL } from "@/lib/config";
 
-const API_URL = (import.meta as any).env?.VITE_API_URL || "http://localhost:8000";
 const COLORS = ["#7c3aed", "#3b82f6", "#10b981", "#f97316", "#ec4899", "#f59e0b", "#06b6d4"];
 
 // Budget category groups (same as add-transaction for consistency)

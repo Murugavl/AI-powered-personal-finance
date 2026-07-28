@@ -2,8 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Bot, Send, XCircle, Mic } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { theme } from "@/lib/theme";
-
-const API_URL = (import.meta as any).env?.VITE_API_URL || "http://localhost:8000";
+import { API_URL } from "@/lib/config";
 
 function FormattedMessage({ text, sender }: { text: string; sender: "user" | "bot" }) {
   if (!text) return null;

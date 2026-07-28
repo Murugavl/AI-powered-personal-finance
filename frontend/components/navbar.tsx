@@ -8,8 +8,7 @@ import {
   Menu, X, Bell, Target
 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
-
-const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || "http://localhost:8000";
+import { API_URL as API_BASE_URL } from "@/lib/config";
 
 const navItems = [
   { name: "Dashboard", path: "/", icon: Home },

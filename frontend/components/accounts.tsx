@@ -5,8 +5,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Plus, Trash2, Wallet, CreditCard, Briefcase, Search } from "lucide-react";
 import { toast } from "react-toastify";
-
-const API_URL = (import.meta as any).env?.VITE_API_URL || "http://localhost:8000";
+import { API_URL } from "@/lib/config";
 
 const inputStyle = {
   width: "100%", padding: "0.75rem 1rem",

@@ -6,8 +6,7 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, Legend,
 } from "recharts";
-
-const API_URL = (import.meta as any).env?.VITE_API_URL || "http://localhost:8000";
+import { API_URL } from "@/lib/config";
 const COLORS = ["#7c3aed", "#3b82f6", "#10b981", "#f97316", "#ec4899", "#f59e0b"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 

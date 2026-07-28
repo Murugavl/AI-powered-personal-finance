@@ -7,8 +7,7 @@ import { Search, Plus, Upload, Trash2, X, AlertCircle, ArrowLeft, ArrowUpDown, C
 import { toast } from "react-toastify";
 import { useAuth } from "@/components/AuthProvider";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-
-const API_URL = (import.meta as any).env?.VITE_API_URL || (import.meta as any).env?.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_URL } from "@/lib/config";
 
 const categories = [
   { label: "Food & Dining", value: "food", icon: "🍽️" },

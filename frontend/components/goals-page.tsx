@@ -6,8 +6,7 @@ import { toast } from "react-toastify";
 import { useAuth } from "@/components/AuthProvider";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Skeleton } from "@/components/ui/skeleton";
-
-const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || "http://localhost:8000";
+import { API_URL as API_BASE_URL } from "@/lib/config";
 
 interface GoalItem {
   _id: string;

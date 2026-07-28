@@ -12,5 +12,6 @@ pdfkit
 python-multipart
 Pillow
 passlib[bcrypt]
+python-dotenv
 reportlab>=4.0.0
 

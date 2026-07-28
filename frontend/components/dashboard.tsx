@@ -13,8 +13,7 @@ import {
   Wallet, TrendingUp, TrendingDown, PiggyBank,
   Plus, ArrowRight, CreditCard, Activity,
 } from "lucide-react";
-
-const API_URL = (import.meta as any).env?.VITE_API_URL || "http://localhost:8000";
+import { API_URL } from "@/lib/config";
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 

@@ -17,8 +17,7 @@ import * as z from "zod";
 import { toast } from "react-toastify";
 import { useAuth } from "@/components/AuthProvider";
 import { theme } from "@/lib/theme";
-
-const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || "http://localhost:8000";
+import { API_URL as API_BASE_URL } from "@/lib/config";
 
 // ─── Income Categories ────────────────────────────────────────────────────────
 const incomeCategories = [
