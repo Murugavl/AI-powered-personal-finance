@@ -34,7 +34,7 @@ from fastapi.concurrency import run_in_threadpool
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.database import get_db
 from app.auth import get_current_user
-from app.config import settings
+from app.config import BASE_DIR, settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/bills", tags=["Bill Upload"])
@@ -62,6 +62,8 @@ def process_ocr_pipeline(image_bytes: bytes) -> list[str]:
 # ─── Amount Keywords (ordered most-specific → least-specific) ────────────────
 AMOUNT_PATTERNS = [
     # Highest specificity
+    r"TOTAL\s+AMOUNT\s+PAYABLE\s*[:\-]?\s*[\₹\$\£\€]?\s*([\d,]+\.?\d*)",
+    r"TOTAL\s+PAYABLE\s*[:\-]?\s*[\₹\$\£\€]?\s*([\d,]+\.?\d*)",
     r"NET\s+AMOUNT\s*[:\-]?\s*[\₹\$\£\€]?\s*([\d,]+\.?\d*)",
     r"GRAND\s+TOTAL\s*[:\-]?\s*[\₹\$\£\€]?\s*([\d,]+\.?\d*)",
     r"AMOUNT\s+PAYABLE\s*[:\-]?\s*[\₹\$\£\€]?\s*([\d,]+\.?\d*)",
@@ -297,23 +299,49 @@ async def extract_bill_with_groq(image_bytes: bytes, content_type: Optional[str]
     return None
 
 
-def extract_amount(text: str) -> Optional[float]:
+def extract_amount(text: str, allow_weak_matches: bool = True) -> Optional[float]:
     """Try all keyword patterns in priority order. Return first confident match."""
     text_upper = text.upper().replace("\n", " ").replace("\r", " ")
     # Normalize multiple spaces
     text_upper = re.sub(r" +", " ", text_upper)
 
-    for pattern in AMOUNT_PATTERNS:
+    patterns = AMOUNT_PATTERNS if allow_weak_matches else AMOUNT_PATTERNS[:14]
+    for pattern in patterns:
         match = re.search(pattern, text_upper)
         if match:
-            raw = match.group(1).replace(",", "").strip()
-            try:
-                value = float(raw)
-                if 0.01 <= value <= 9_999_999:  # Sanity range
-                    return value
-            except ValueError:
-                continue
+            value = parse_amount(match.group(1))
+            if value is not None:
+                return value
     return None
+
+
+def parse_amount(value: object) -> Optional[float]:
+    """Parse common numeric and localized currency formats into a valid amount."""
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, (int, float)):
+        amount = float(value)
+    else:
+        raw = str(value).strip()
+        if not raw:
+            return None
+        is_negative = raw.startswith("(") and raw.endswith(")")
+        raw = re.sub(r"[^\d,.\-]", "", raw)
+        if is_negative:
+            raw = "-" + raw.strip("-")
+        if "," in raw and "." in raw and raw.rfind(",") > raw.rfind("."):
+            raw = raw.replace(".", "").replace(",", ".")
+        elif "," in raw and "." not in raw and re.search(r",\d{1,2}$", raw):
+            raw = raw.replace(",", ".")
+        else:
+            raw = raw.replace(",", "")
+        try:
+            amount = float(raw)
+        except ValueError:
+            return None
+    if not math.isfinite(amount) or not 0.01 <= amount <= 9_999_999:
+        return None
+    return amount
 
 
 def extract_date(text: str) -> Optional[str]:
@@ -444,60 +472,49 @@ async def upload_bill(
         category: str = "Shopping"
         confidence = 0
 
-        # Try extracting fields from Tesseract OCR results
+        # Prefer amounts explicitly labeled as totals over incidental receipt numbers.
         if all_texts:
             for text in all_texts:
-                amount = extract_amount(text)
+                amount = extract_amount(text, allow_weak_matches=False)
                 if amount is not None:
-                    if net_amount is None:
-                        net_amount = amount
-                        confidence = 80
+                    net_amount = amount
+                    confidence = 85
                     break
 
-            if net_amount is None:
-                # Largest number fallback
-                all_numbers = []
-                for text in all_texts:
-                    nums = re.findall(r"[\₹\$\£\€]?\s*([\d,]+\.\d{2})\b", text)
-                    for n in nums:
-                        try:
-                            val = float(n.replace(",", ""))
-                            if 0.01 <= val <= 999_999:
-                                all_numbers.append(val)
-                        except ValueError:
-                            pass
-                if all_numbers:
-                    net_amount = max(all_numbers)
-                    confidence = 40
-
-        # --- 2. GROQ Vision AI Fallback ---
-        # Trigger GROQ Vision if Tesseract failed or couldn't detect amount
-        if net_amount is None or not all_texts:
+        # Ask vision before falling back to an unlabeled OCR amount.
+        groq_result = None
+        if net_amount is None:
             logger.info("Attempting GROQ Vision AI bill extraction...")
             groq_result = await extract_bill_with_groq(image_bytes, file.content_type)
             if groq_result:
-                if groq_result.get("amount") is not None:
-                    try:
-                        net_amount = float(groq_result["amount"])
-                        confidence = 95
-                    except (ValueError, TypeError):
-                        pass
+                net_amount = parse_amount(groq_result.get("amount"))
+                if net_amount is None and isinstance(groq_result.get("raw_text"), str):
+                    net_amount = extract_amount(
+                        groq_result["raw_text"], allow_weak_matches=False
+                    )
+                if net_amount is not None:
+                    confidence = 95
                 merchant = groq_result.get("merchant") or merchant
                 extracted_date = groq_result.get("date") or extracted_date
-                if groq_result.get("tax") is not None:
-                    try:
-                        tax = float(groq_result["tax"])
-                    except (ValueError, TypeError):
-                        pass
-                if groq_result.get("discount") is not None:
-                    try:
-                        discount = float(groq_result["discount"])
-                    except (ValueError, TypeError):
-                        pass
+                tax = parse_amount(groq_result.get("tax"))
+                discount = parse_amount(groq_result.get("discount"))
                 if groq_result.get("category"):
                     category = str(groq_result["category"]).capitalize()
                 if groq_result.get("raw_text"):
                     all_texts.append(str(groq_result["raw_text"]))
+
+        if net_amount is None and all_texts:
+            all_numbers = []
+            for text in all_texts:
+                nums = re.findall(r"[\₹\$\£\€]?\s*([\d,]+\.\d{2})\b", text)
+                for number in nums:
+                    amount = parse_amount(number)
+                    if amount is not None:
+                        all_numbers.append(amount)
+            unique_amounts = set(all_numbers)
+            if len(unique_amounts) == 1:
+                net_amount = unique_amounts.pop()
+                confidence = 50
 
         # --- 3. Validate extraction success ---
         if net_amount is None:
@@ -527,11 +544,11 @@ async def upload_bill(
         # --- 5. Save receipt image safely (handling read-only filesystems gracefully) ---
         image_url = None
         try:
-            save_dir = os.path.join("uploads", "receipts", user_id)
-            os.makedirs(save_dir, exist_ok=True)
+            save_dir = BASE_DIR / "uploads" / "receipts" / user_id
+            save_dir.mkdir(parents=True, exist_ok=True)
             ext = "png" if "png" in (file.content_type or "").lower() else "jpg"
             filename = f"receipt_{uuid.uuid4().hex[:12]}.{ext}"
-            file_path = os.path.join(save_dir, filename)
+            file_path = save_dir / filename
             with open(file_path, "wb") as f:
                 f.write(image_bytes)
             image_url = f"/uploads/receipts/{user_id}/{filename}".replace("\\", "/")
@@ -545,7 +562,11 @@ async def upload_bill(
             "amount": round(net_amount, 2),
             "type": "expense",
             "category": category.lower().replace(" ", "_"),
+            "merchant": merchant,
             "description": f"Bill from {merchant}" if merchant else "Bill (Auto-extracted)",
+            "tax": round(tax, 2) if tax is not None else None,
+            "discount": round(discount, 2) if discount is not None else None,
+            "extraction_confidence": confidence,
             "image_url": image_url,
         }
 

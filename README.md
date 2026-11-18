@@ -29,12 +29,12 @@ cp .env.example .env  # Configure your secret keys and MONGO_URL
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload
 ```
 
 ### 3️⃣ Frontend Setup
 ```bash
 cd frontend
+cp .env.example .env.local  # Ensure VITE_API_URL targets http://localhost:8100
 npm install
 npm run dev  # Start Vite development server
 ```

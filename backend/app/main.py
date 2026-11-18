@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.config import settings
+from app.config import BASE_DIR, settings
 from app.database import init_db_indexes
 from app.routes.transactions import router as transactions_router
 from app.routes.accounts import router as accounts_router
@@ -21,11 +21,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Finance App API", version="2.0.0", lifespan=lifespan)
 
-import os
 from fastapi.staticfiles import StaticFiles
 
-os.makedirs(os.path.join("uploads", "receipts"), exist_ok=True)
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+uploads_dir = BASE_DIR / "uploads"
+(uploads_dir / "receipts").mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(uploads_dir)), name="uploads")
 
 # Parse allowed origins from environment (comma-separated string)
 allowed_origins = [origin.strip() for origin in settings.ALLOWED_ORIGINS.split(",") if origin.strip() and origin.strip() != "*"]
