@@ -13,7 +13,7 @@ The AI-Powered Personal Finance Assistant helps users track expenses, analyze sp
 ## 🏗 Tech Stack
 - **Frontend**: React 18, Vite, React Router DOM, Tailwind CSS
 - **Backend**: FastAPI (Python), MongoDB (Motor Async Client)
-- **AI Models**: GROQ API (LLaMA 3) for chatbot & AI receipt vision insights
+- **AI Models**: Groq GPT-OSS for chatbot and Qwen 3.8 Vision for receipt extraction
 
 ## 🚀 Installation & Setup
 ### 1️⃣ Clone the Repository

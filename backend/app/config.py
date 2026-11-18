@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Dynamically locate and load the .env file from root or backend directory
@@ -17,7 +18,7 @@ class Settings(BaseSettings):
     MONGO_URL: str = os.getenv("MONGO_URL", "mongodb://localhost:27017/AI_Finance")
     
     # JWT Authentication Configuration
-    JWT_SECRET: str = os.getenv("JWT_SECRET", "default_secret_key_change_in_production")
+    JWT_SECRET: str = Field(..., min_length=32)
     JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
     JWT_EXPIRE_MINUTES: int = int(os.getenv("JWT_EXPIRE_MINUTES", "10080"))
     

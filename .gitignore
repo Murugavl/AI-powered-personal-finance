@@ -1,6 +1,8 @@
 # Secret & Environment Files
 .env
 .env.local
+.env.*
+!.env.example
 .env.*.local
 *.env
 

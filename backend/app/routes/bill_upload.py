@@ -227,7 +227,7 @@ def run_ocr(img_array: np.ndarray) -> str:
 
 async def extract_bill_with_groq(image_bytes: bytes, content_type: Optional[str]) -> Optional[dict]:
     """
-    Fallback bill extraction using GROQ Vision API (e.g. llama-3.2-11b-vision-preview).
+    Fallback bill extraction using Groq's Qwen vision model.
     Works seamlessly in deployed cloud environments without requiring local Tesseract binaries.
     """
     api_key = settings.GROQ_API_KEY or os.getenv("GROQ_API_KEY", "")
@@ -253,10 +253,7 @@ async def extract_bill_with_groq(image_bytes: bytes, content_type: Optional[str]
         "}"
     )
 
-    models_to_try = [
-        "llama-3.2-11b-vision-preview",
-        "llama-3.2-90b-vision-preview"
-    ]
+    models_to_try = ["qwen/qwen3.8-27b"]
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
@@ -276,7 +273,7 @@ async def extract_bill_with_groq(image_bytes: bytes, content_type: Optional[str]
                     }
                 ],
                 "temperature": 0.1,
-                "max_tokens": 1000,
+                "max_completion_tokens": 1000,
                 "response_format": {"type": "json_object"}
             }
             async with httpx.AsyncClient(timeout=15.0) as client:

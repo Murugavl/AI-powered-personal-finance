@@ -42,7 +42,7 @@ class ChatRequest(BaseModel):
 
 
 def build_system_context(total_balance: float, total_income: float,
-                          total_expense: float, accounts: list,
+                          total_expense: float, account_count: int,
                           budgets: list, top_category: str) -> str:
     """Build the AI system prompt enriched with user financial data and security guardrails."""
     net_savings = total_income - total_expense
@@ -56,7 +56,7 @@ def build_system_context(total_balance: float, total_income: float,
 • Total Expenses:     ₹{total_expense:,.2f}
 • Net Savings:        ₹{net_savings:,.2f}
 • Savings Rate:       {savings_rate:.1f}%
-• Accounts:           {len(accounts)} account(s)
+• Accounts:           {account_count} account(s)
 • Top Spend Category: {top_category}
 • Active Budgets:     {len(budgets)}
 
@@ -92,7 +92,7 @@ def format_user_input(user_message: str) -> str:
 
 async def call_groq(system_context: str, history: list[dict], user_message: str, api_key: str) -> tuple[str | None, str | None]:
     """Call GROQ API with system context, conversation history, and user message."""
-    models_to_try = ["llama-3.1-8b-instant", "llama3-8b-8192", "mixtral-8x7b-32768", "gemma2-9b-it"]
+    models_to_try = ["openai/gpt-oss-20b", "openai/gpt-oss-120b"]
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
@@ -132,29 +132,156 @@ async def call_groq(system_context: str, history: list[dict], user_message: str,
     return None, None
 
 
-    # --- 4. Call GROQ API ---
+def smart_fallback(user_message: str, total_balance: float, total_income: float,
+                   total_expense: float, account_count: int, top_category: str) -> str:
+    """Provide basic planning guidance when the Groq service is unavailable."""
+    message = user_message.casefold()
+    if account_count == 0 and total_income == 0 and total_expense == 0:
+        return "Add your accounts and recent income and expenses, then I can help you build a plan."
+
+    net_savings = total_income - total_expense
+    if any(word in message for word in ("save", "saving", "savings")):
+        if total_income > 0:
+            target = total_income * 0.2
+            return (
+                f"Your tracked income is ₹{total_income:,.2f} and tracked expenses are "
+                f"₹{total_expense:,.2f}. Consider setting aside up to ₹{target:,.2f} "
+                "from future income, adjusting the target to fit your needs."
+            )
+        return "Track your income and expenses first; then I can help set a realistic savings target."
+
+    if any(word in message for word in ("budget", "spend", "expense")):
+        if top_category != "N/A":
+            return (
+                f"Your tracked expenses total ₹{total_expense:,.2f}, with **{top_category}** "
+                "as your top spending category. Review that category and set a limit that fits your goals."
+            )
+        return "Add a few expenses to identify your main spending categories and set a useful budget."
+
+    return (
+        f"Your current account balance is ₹{total_balance:,.2f}; tracked income is "
+        f"₹{total_income:,.2f} and tracked expenses are ₹{total_expense:,.2f}. "
+        f"Your tracked net is ₹{net_savings:,.2f}. Tell me a goal, such as saving or budgeting, "
+        "and I can suggest a next step."
+    )
+
+
+@router.post("/")
+async def chat(
+    request: ChatRequest,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    user_id: str = Depends(get_current_user),
+):
+    """Answer a user's finance-planning question using their own financial data."""
+    enforce_rate_limit(user_id)
+
+    try:
+        totals_cursor = db.transactions.aggregate([
+            {"$match": {"user_id": user_id}},
+            {
+                "$group": {
+                    "_id": None,
+                    "income": {
+                        "$sum": {
+                            "$cond": [
+                                {"$eq": ["$type", "income"]},
+                                {"$ifNull": ["$amount", 0]},
+                                0,
+                            ]
+                        }
+                    },
+                    "expense": {
+                        "$sum": {
+                            "$cond": [
+                                {"$eq": ["$type", "expense"]},
+                                {"$ifNull": ["$amount", 0]},
+                                0,
+                            ]
+                        }
+                    },
+                }
+            },
+        ])
+        totals_rows = await totals_cursor.to_list(length=1)
+        totals = totals_rows[0] if totals_rows else {}
+
+        accounts_cursor = db.accounts.aggregate([
+            {"$match": {"user_id": user_id}},
+            {
+                "$group": {
+                    "_id": None,
+                    "balance": {"$sum": {"$ifNull": ["$balance", 0]}},
+                    "count": {"$sum": 1},
+                }
+            },
+        ])
+        account_rows = await accounts_cursor.to_list(length=1)
+        total_balance = float(account_rows[0].get("balance", 0)) if account_rows else 0.0
+        account_count = int(account_rows[0].get("count", 0)) if account_rows else 0
+
+        category_cursor = db.transactions.aggregate([
+            {"$match": {"user_id": user_id, "type": "expense"}},
+            {
+                "$group": {
+                    "_id": {"$ifNull": ["$category", "Other"]},
+                    "amount": {"$sum": {"$ifNull": ["$amount", 0]}},
+                }
+            },
+            {"$sort": {"amount": -1}},
+            {"$limit": 1},
+        ])
+        category_rows = await category_cursor.to_list(length=1)
+
+        budgets_cursor = db.budgets.find({"user_id": user_id}, {"_id": 1})
+        budgets = await budgets_cursor.to_list(length=200)
+        history_record = await db.chat_history.find_one({"user_id": user_id}) or {}
+    except Exception:
+        logger.exception("Failed to load financial context for chatbot")
+        raise HTTPException(status_code=500, detail="Unable to prepare a chat response.")
+
+    total_income = float(totals.get("income", 0))
+    total_expense = float(totals.get("expense", 0))
+    top_category = str(category_rows[0]["_id"]) if category_rows else "N/A"
+    system_context = build_system_context(
+        total_balance, total_income, total_expense, account_count, budgets, top_category
+    )
+    history = [
+        {"role": turn["role"], "content": turn["content"]}
+        for turn in history_record.get("history", [])
+        if isinstance(turn, dict)
+        and turn.get("role") in {"user", "assistant"}
+        and isinstance(turn.get("content"), str)
+    ][-10:]
+
+    message = request.message.strip()
+    reply = None
+    model_used = None
     groq_key = settings.GROQ_API_KEY or os.getenv("GROQ_API_KEY", "")
     if groq_key:
         logger.info(f"Calling GROQ LLM for user {user_id[:8]}...")
-        reply, model_used = await call_groq(system_context, history, msg, groq_key)
+        reply, model_used = await call_groq(system_context, history, message, groq_key)
 
-    # --- 5. Rule-based fallback if GROQ is unavailable ---
     if not reply:
-        logger.warning(f"GROQ LLM API failed for user {user_id[:8]}. Using rule-based fallback.")
-        reply = smart_fallback(msg, total_balance, total_income, total_expense, accounts, top_category)
+        logger.warning("Groq LLM unavailable for user %s; using planning fallback.", user_id[:8])
+        reply = smart_fallback(
+            message, total_balance, total_income, total_expense, account_count, top_category
+        )
         model_used = "fallback"
 
-    # --- 7. Save updated Conversation History ---
     new_history = history + [
-        {"role": "user", "content": msg},
+        {"role": "user", "content": message},
         {"role": "assistant", "content": reply}
     ]
-    new_history = new_history[-10:]  # Keep last 5 pairs
-    await db.chat_history.update_one(
-        {"user_id": user_id},
-        {"$set": {"history": new_history, "updated_at": datetime.now(timezone.utc)}},
-        upsert=True
-    )
+    new_history = new_history[-10:]
+    try:
+        await db.chat_history.update_one(
+            {"user_id": user_id},
+            {"$set": {"history": new_history, "updated_at": datetime.now(timezone.utc)}},
+            upsert=True
+        )
+    except Exception:
+        logger.exception("Failed to save chatbot history")
+        raise HTTPException(status_code=500, detail="Unable to save the chat response.")
 
     return {"reply": reply, "model": model_used}
 
